@@ -5,41 +5,58 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>彩云天气API</title>
 
-<!-- ============================================================
-     ⚙️ 用户配置（改这里就行）
-     ============================================================ -->
+<!-- ================================================================
+     用户配置（改这里就行）
+     ================================================================
+     · 本页面会在 Android WebView 环境读取原生配置（NATIVE_CONFIG）
+     · 如果是纯浏览器打开，NATIVE_CONFIG 为 null，会走下面的兜底逻辑
+     ================================================================ -->
 <script>
   const NATIVE_CONFIG = window.AndroidConfig || null;
-  let CAIYUN = NATIVE_CONFIG ? NATIVE_CONFIG.getApiKey() : '';
-  let API_BASE = NATIVE_CONFIG ? NATIVE_CONFIG.getApiBase() : 'https://api.caiyunapp.com/v2.6';
-  let LOCATION = NATIVE_CONFIG ? NATIVE_CONFIG.getLocation() : '';
-  let PLACE_NAME = NATIVE_CONFIG ? NATIVE_CONFIG.getPlaceName() : '未设置位置';
-  let REFRESH_MIN = NATIVE_CONFIG ? Math.max(1, Number(NATIVE_CONFIG.getRefreshMin()) || 5) : 5;
 
+  /* 从原生桥接读取配置，没有就用默认值 */
+  let CAIYUN       = NATIVE_CONFIG ? NATIVE_CONFIG.getApiKey()     : '';
+  let API_BASE     = NATIVE_CONFIG ? NATIVE_CONFIG.getApiBase()    : 'https://api.caiyunapp.com/v2.6';
+  let LOCATION     = NATIVE_CONFIG ? NATIVE_CONFIG.getLocation()   : '';
+  let PLACE_NAME   = NATIVE_CONFIG ? NATIVE_CONFIG.getPlaceName()  : '未设置位置';
+  let REFRESH_MIN  = NATIVE_CONFIG ? Math.max(1, Number(NATIVE_CONFIG.getRefreshMin()) || 5) : 5;
+
+  /* 每次加载天气前都从原生同步一次配置，保证「设置」改动即时生效 */
   function syncNativeConfig(){
     if(!NATIVE_CONFIG) return;
-    CAIYUN = NATIVE_CONFIG.getApiKey() || '';
-    API_BASE = NATIVE_CONFIG.getApiBase() || 'https://api.caiyunapp.com/v2.6';
-    LOCATION = NATIVE_CONFIG.getLocation() || '';
-    PLACE_NAME = NATIVE_CONFIG.getPlaceName() || '未设置位置';
+    CAIYUN      = NATIVE_CONFIG.getApiKey()    || '';
+    API_BASE    = NATIVE_CONFIG.getApiBase()   || 'https://api.caiyunapp.com/v2.6';
+    LOCATION    = NATIVE_CONFIG.getLocation()  || '';
+    PLACE_NAME  = NATIVE_CONFIG.getPlaceName() || '未设置位置';
     REFRESH_MIN = Math.max(1, Number(NATIVE_CONFIG.getRefreshMin()) || 5);
   }
+
+  /* 状态栏高度由原生注入，用于顶部留白 */
   if (NATIVE_CONFIG && NATIVE_CONFIG.getStatusBarInsetDp) {
     document.documentElement.style.setProperty('--status-inset', NATIVE_CONFIG.getStatusBarInsetDp() + 'px');
   }
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-*{box-sizing:border-box}
-body{margin:0;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;
-  background:radial-gradient(circle at 80% 5%,#4387bd 0,#0b4e82 28%,#071b3d 72%);min-height:100vh;
-  position:relative}
 
-/* ============================================================
-   ① 状态栏毛玻璃层：fixed，只盖住状态栏那一小块高度
-      始终提供毛玻璃，防止内容上滑时与状态栏图标重合
-   ============================================================ */
+<style>
+/* ================================================================
+   1. 全局基础
+   ================================================================ */
+*{box-sizing:border-box}
+body{
+  margin:0;
+  color:#fff;
+  font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;
+  background:radial-gradient(circle at 80% 5%,#4387bd 0,#0b4e82 28%,#071b3d 72%);
+  min-height:100vh;
+  position:relative;
+}
+
+/* ================================================================
+   2. 状态栏毛玻璃层
+   —— 固定在顶部，只盖住状态栏那一小块高度
+   ================================================================ */
 .status-glass{
   position:fixed;
   top:0;left:0;right:0;
@@ -54,9 +71,9 @@ body{margin:0;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",s
           mask-image:linear-gradient(180deg,#000 0%,#000 65%,transparent 100%);
 }
 
-/* ============================================================
-   ② 地址栏：普通文档流，随页面滚动，滚走不固定
-   ============================================================ */
+/* ================================================================
+   3. 顶部地址栏
+   ================================================================ */
 .top{
   position:relative;
   z-index:100;
@@ -83,7 +100,6 @@ body{margin:0;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",s
           mask-image:linear-gradient(180deg,#000 0%,#000 46%,rgba(0,0,0,.55) 78%,transparent 100%);
 }
 
-/* —— 地址：右移 + 字号加大 —— */
 .loc{
   font-size:18px;
   margin-left:10px;
@@ -98,18 +114,36 @@ body{margin:0;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",s
 
 .top-right{display:flex;align-items:center;gap:7px;flex:0 0 auto}
 .muted{color:#c2d5e6;font-size:11px;font-weight:400;opacity:.82;white-space:nowrap;letter-spacing:.1px}
-.settings-btn{width:30px;height:30px;border:1px solid #ffffff14;border-radius:10px;background:#ffffff09;color:#c9d9e8;display:grid;place-items:center;cursor:pointer;opacity:.78;font-size:16px;line-height:1}
+.settings-btn{
+  width:30px;height:30px;
+  border:1px solid #ffffff14;
+  border-radius:10px;
+  background:#ffffff09;
+  color:#c9d9e8;
+  display:grid;place-items:center;
+  cursor:pointer;opacity:.78;font-size:16px;line-height:1;
+}
 .settings-btn:active{background:#ffffff18;transform:scale(.96)}
-.card{background:#174f827d;border:1px solid #ffffff18;border-radius:20px;
-  box-shadow:0 6px 18px #0002}
 
-/* —— 页面主体：顶栏在文档流中已占位，这里不再需要额外顶部 padding —— */
+/* ================================================================
+   4. 通用卡片容器
+   ================================================================ */
+.card{
+  background:#174f827d;
+  border:1px solid #ffffff18;
+  border-radius:20px;
+  box-shadow:0 6px 18px #0002;
+}
+
 .page{
   max-width:1180px;
   margin:auto;
   padding:0 18px 18px;
 }
 
+/* ================================================================
+   5. 主天气区
+   ================================================================ */
 .hero{padding:30px 24px 26px;display:flex;flex-direction:column;align-items:center;text-align:center}
 .hero-temp{font-size:112px;font-weight:400;line-height:1;letter-spacing:-6px}
 .hero-temp small{font-size:46px;letter-spacing:0;vertical-align:top;line-height:1.4;font-weight:400}
@@ -117,109 +151,214 @@ body{margin:0;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",s
 .hero-icon{font-size:40px;line-height:1}
 .hero-range{margin-top:12px;font-size:16px;color:#c2d4e5;letter-spacing:.5px}
 
+/* ================================================================
+   6. 实时指标网格
+   ================================================================ */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
 .metric{padding:14px;display:flex;gap:12px;align-items:center;min-height:94px}
-.mi{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
-  background:#7dcaff25;font-size:20px;flex:0 0 42px}
+.mi{
+  width:42px;height:42px;border-radius:50%;
+  display:grid;place-items:center;
+  background:#7dcaff25;font-size:20px;flex:0 0 42px;
+}
 .ml{font-size:12px;color:#b8cee2}
 .mv{font-size:22px;font-weight:650;margin:2px 0}
 .ms{font-size:11px;color:#b8cee2}
 
 .metric-sun .ms-body{flex:1;min-width:0}
-.metric-sun .ms-times{display:flex;align-items:center;gap:5px;
+.metric-sun .ms-times{
+  display:flex;align-items:center;gap:5px;
   font-size:18px;font-weight:700;line-height:1.25;margin:2px 0;
-  letter-spacing:-.3px}
+  letter-spacing:-.3px;
+}
 .metric-sun .ms-times .rise{color:#ffc271}
 .metric-sun .ms-times .set{color:#ff9f5a}
 .metric-sun .ms-times .sep{color:#aac2d7;font-weight:400;font-size:15px}
-.metric-sun .ms-times .sun-icon{display:inline-flex;align-items:center;
-  justify-content:center;flex:0 0 auto}
+.metric-sun .ms-times .sun-icon{
+  display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
+}
 
+/* ================================================================
+   7. 通用板块外壳
+   ================================================================ */
 .section{padding:14px 17px;margin-top:12px}
-.st{font-size:18px;font-weight:700;margin-bottom:12px;display:flex;
-  justify-content:space-between;align-items:baseline}
+.st{
+  font-size:18px;font-weight:700;
+  margin-bottom:12px;
+  display:flex;justify-content:space-between;align-items:baseline;
+}
 .st small{font-size:13px;color:#aac2d7;font-weight:400}
 
-.hourly-head{display:flex;justify-content:space-between;align-items:baseline;
-  margin-bottom:8px;flex-wrap:wrap;gap:8px}
+/* ================================================================
+   8. 逐时预报板块
+   ================================================================ */
+.hourly-head{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:8px;flex-wrap:wrap;gap:8px;
+}
 .hourly-head .htitle{font-size:18px;font-weight:700}
 
-.hourly-badges{display:flex;gap:6px;align-items:center;
-  margin-bottom:8px;flex-wrap:nowrap;overflow-x:auto;
-  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.hourly-badges{
+  display:flex;gap:6px;align-items:center;
+  margin-bottom:8px;
+  flex-wrap:nowrap;overflow-x:auto;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
 .hourly-badges::-webkit-scrollbar{display:none}
 
-.hourly-date{display:inline-flex;align-items:center;flex:0 0 auto;white-space:nowrap;
+.hourly-date{
+  display:inline-flex;align-items:center;flex:0 0 auto;white-space:nowrap;
   background:rgba(16,185,129,.16);color:#3ddc97;
-  padding:5px 11px;border-radius:9px;font-size:13px;font-weight:600;
-  letter-spacing:.2px}
+  padding:5px 11px;border-radius:9px;
+  font-size:13px;font-weight:600;letter-spacing:.2px;
+}
 
-.no-rain-badge{display:inline-flex;align-items:center;flex:0 0 auto;white-space:nowrap;
+.no-rain-badge{
+  display:inline-flex;align-items:center;flex:0 0 auto;white-space:nowrap;
   background:rgba(255,255,255,.07);color:#aac2d7;
-  padding:5px 11px;border-radius:9px;font-size:13px;font-weight:600;
-  letter-spacing:.2px}
+  padding:5px 11px;border-radius:9px;
+  font-size:13px;font-weight:600;letter-spacing:.2px;
+}
 .no-rain-badge b{color:#9ce8ff;font-weight:700}
 
-.uv-badge{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;white-space:nowrap;
+.uv-badge{
+  display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;white-space:nowrap;
   background:rgba(255,180,80,.14);color:#ffc271;
-  padding:5px 11px;border-radius:9px;font-size:13px;font-weight:600;
-  letter-spacing:.2px}
+  padding:5px 11px;border-radius:9px;
+  font-size:13px;font-weight:600;letter-spacing:.2px;
+}
 .uv-badge svg{width:13px;height:13px;display:block;flex:0 0 auto}
 .uv-badge b{color:#ffb34f;font-weight:800;font-size:14px;margin-left:2px}
 
 .chart-wrap{display:flex;align-items:stretch;gap:0}
 .y-axis{position:relative;flex:0 0 34px;height:190px;pointer-events:none}
-.y-axis span{position:absolute;right:4px;transform:translateY(-50%);
-  font-size:12px;white-space:nowrap;font-weight:600;letter-spacing:-.2px}
+.y-axis span{
+  position:absolute;right:4px;transform:translateY(-50%);
+  font-size:12px;white-space:nowrap;font-weight:600;letter-spacing:-.2px;
+}
 .y-axis span.lbl-temp{color:#ffc271}
 .y-axis span.lbl-hum{color:#c8e4ff}
 
-.chart-scroll{flex:1;min-width:0;height:190px;overflow-x:auto;overflow-y:hidden;
-  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.chart-scroll{
+  flex:1;min-width:0;height:190px;
+  overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
 .chart-scroll::-webkit-scrollbar{display:none}
 .chartbox{height:190px;width:1440px;position:relative}
 
+/* ================================================================
+   9. 降水预报板块
+   ================================================================ */
 .rain-desc{font-size:15px;font-weight:650;color:#9ce8ff;margin-bottom:16px;line-height:1.4}
 .rain-bars{display:flex;align-items:flex-end;gap:2px;height:82px}
-.rain-bars i{flex:1;border-radius:2px 2px 0 0;min-height:2px;
-  transition:height .4s ease;background:#ffffff14}
+.rain-bars i{
+  flex:1;border-radius:2px 2px 0 0;min-height:2px;
+  transition:height .4s ease;background:#ffffff14;
+}
 .rain-bars .light{background:#6fd4ff}
-.rain-bars .mid{background:#4ebcff;box-shadow:none}
-.rain-bars .heavy{background:#3a8eff;box-shadow:none}
-.rain-bars .storm{background:#7b6bff;box-shadow:none}
-.rain-scale{display:flex;justify-content:space-between;font-size:12px;
-  color:#aac2d7;margin-top:8px}
-.rain-hint{margin-top:12px;font-size:13px;color:#aac2d7;
-  padding-top:10px;border-top:1px solid #ffffff10}
+.rain-bars .mid  {background:#4ebcff}
+.rain-bars .heavy{background:#3a8eff}
+.rain-bars .storm{background:#7b6bff}
+.rain-scale{
+  display:flex;justify-content:space-between;
+  font-size:12px;color:#aac2d7;margin-top:8px;
+}
+.rain-hint{
+  margin-top:12px;font-size:13px;color:#aac2d7;
+  padding-top:10px;border-top:1px solid #ffffff10;
+}
 
+/* ================================================================
+   10. 未来 48 小时天气
+   —— 温度条通过 flex:1 占据剩余空间
+   —— 日期 / 图标 / 温度数字各列已收紧，让温度条更长
+   ================================================================ */
 .days-v{display:flex;flex-direction:column}
-.day-row{display:flex;align-items:center;gap:12px;padding:16px 6px;
-  border-bottom:1px solid #ffffff14}
+.day-row{
+  display:flex;align-items:center;gap:10px;
+  padding:16px 6px;
+  border-bottom:1px solid #ffffff14;
+}
 .day-row:last-child{border-bottom:none}
 
-.day-label{flex:0 0 110px;display:flex;flex-direction:column;gap:2px}
-.day-label .dl-top{display:flex;align-items:baseline;gap:8px}
-.day-label .dl-top b{font-size:16px;font-weight:600;white-space:nowrap;color:#e7f0fa}
-.day-label .dl-top span{font-size:13px;color:#aac2d7;white-space:nowrap}
-.day-label .dl-bot{font-size:14px;color:#c2d4e5;white-space:nowrap}
+/* 左侧日期块：
+   ┌ 今天   10/8         晴 ┐
+   └────────────────────────┘ */
+.day-label{
+  flex:0 0 136px;                /* 152px → 136px，向左让出 16px */
+  display:flex;
+  align-items:baseline;
+  white-space:nowrap;
+}
+.day-label b{
+  font-size:16px;
+  font-weight:600;
+  color:#e7f0fa;
+  letter-spacing:.2px;
+}
+.day-label .dl-md{
+  font-size:12px;
+  font-weight:400;
+  color:#8fa9c0;
+  transform:translateY(2px);
+  letter-spacing:.1px;
+  margin-left:6px;
+}
+.day-label .dl-cond{
+  font-size:18px;
+  font-weight:600;
+  color:#d6e3f0;
+  letter-spacing:.3px;
+  margin-left:14px;             /* 20px → 14px */
+}
 
-.day-icon{flex:0 0 52px;text-align:center;font-size:30px;line-height:1}
-.day-lo{flex:0 0 50px;font-size:17px;font-weight:600;text-align:right;
-  color:#e7f0fa;letter-spacing:-.3px}
-.day-bar-wrap{flex:1;min-width:60px;padding:0 6px}
+/* 天气图标：40px → 36px */
+.day-icon{flex:0 0 36px;text-align:center;font-size:26px;line-height:1}
+
+/* 最低温（右对齐）：40px → 36px */
+.day-lo{
+  flex:0 0 36px;
+  font-size:16px;font-weight:600;
+  text-align:right;color:#e7f0fa;
+  letter-spacing:-.3px;
+}
+
+/* 中间温度条：flex:1 自动吃掉所有剩余空间 */
+.day-bar-wrap{flex:1;min-width:50px;padding:0 2px}
 .day-bar{height:8px;border-radius:4px;background:#ffffff1c;position:relative}
-.day-bar i{position:absolute;top:0;bottom:0;border-radius:4px;
-  background:linear-gradient(90deg,#ffc271,#ff8a4f)}
-.day-marker{position:absolute;top:50%;transform:translate(-50%,-50%);
+.day-bar i{
+  position:absolute;top:0;bottom:0;border-radius:4px;
+  background:linear-gradient(90deg,#ffc271,#ff8a4f);
+}
+.day-marker{
+  position:absolute;top:50%;transform:translate(-50%,-50%);
   width:12px;height:12px;border-radius:50%;
-  background:#ffb34f;box-shadow:0 0 0 2px #0b1e3a;z-index:2}
-.day-hi{flex:0 0 50px;font-size:17px;font-weight:600;text-align:left;
-  color:#e7f0fa;letter-spacing:-.3px}
+  background:#ffb34f;box-shadow:0 0 0 2px #0b1e3a;
+  z-index:2;
+}
 
-.foot{padding:15px;margin-top:15px;color:#aac0d4;font-size:12px;line-height:1.8;
-  background:#174f827d;border:1px solid #ffffff18;border-radius:20px}
+/* 最高温（左对齐）：40px → 36px */
+.day-hi{
+  flex:0 0 36px;
+  font-size:16px;font-weight:600;
+  text-align:left;color:#e7f0fa;
+  letter-spacing:-.3px;
+}
+
+/* ================================================================
+   11. 页脚 / 错误提示
+   ================================================================ */
+.foot{
+  padding:15px;margin-top:15px;
+  color:#aac0d4;font-size:12px;line-height:1.8;
+  background:#174f827d;border:1px solid #ffffff18;border-radius:20px;
+}
 .err{padding:30px;text-align:center;color:#ffd0d0}
 
+/* ================================================================
+   12. 响应式（平板 / 手机）
+   ================================================================ */
 @media(max-width:850px){
   .hero-temp{font-size:92px}
   .grid{grid-template-columns:repeat(2,1fr)}
@@ -229,11 +368,13 @@ body{margin:0;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",s
   .loc{font-size:17px;margin-left:8px}
   .top{padding:calc(8px + var(--status-inset,0px)) 12px 11px}
   .muted{font-size:11px;opacity:.82}
+
   .hero{padding:24px 16px 20px}
   .hero-temp{font-size:78px;letter-spacing:-4px}
   .hero-temp small{font-size:34px}
   .hero-icon{font-size:32px}
   .hero-sky{font-size:20px}
+
   .grid{gap:8px}
   .metric{padding:11px;min-height:86px;gap:9px}
   .metric-sun .ms-times{font-size:12px;gap:3px}
@@ -241,7 +382,9 @@ body{margin:0;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",s
   .metric-sun .ms-times .sun-icon svg{width:14px;height:11px}
   .mi{width:36px;height:36px;flex:0 0 36px;font-size:17px}
   .mv{font-size:18px}
+
   .rain-bars{height:64px}
+
   .st{font-size:16px}
   .hourly-head .htitle{font-size:16px}
   .hourly-date,.no-rain-badge,.uv-badge{font-size:12px;padding:4px 9px}
@@ -249,39 +392,40 @@ body{margin:0;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",s
   .uv-badge b{font-size:13px}
   .y-axis{flex:0 0 30px}
   .y-axis span{font-size:11px;right:3px}
+
+  /* 手机端各列同步收紧，让温度条更长 */
   .day-row{padding:14px 4px;gap:6px}
-  .day-label{flex:0 0 80px;gap:1px}
-  .day-label .dl-top{gap:6px}
-  .day-label .dl-top b{font-size:14px}
-  .day-label .dl-top span{font-size:11px}
-  .day-label .dl-bot{font-size:12px}
-  .day-icon{flex:0 0 32px;font-size:26px}
-  .day-lo,.day-hi{flex:0 0 42px;font-size:15px}
-  .day-bar-wrap{min-width:40px;padding:0 2px}
+  .day-label{flex:0 0 104px}                /* 118 → 104 */
+  .day-label b{font-size:14px}
+  .day-label .dl-md{font-size:11px;margin-left:5px;transform:translateY(2px)}
+  .day-label .dl-cond{font-size:16px;margin-left:8px}   /* 12 → 8 */
+  .day-icon{flex:0 0 24px;font-size:20px}   /* 28/22 → 24/20 */
+  .day-lo,.day-hi{flex:0 0 30px;font-size:14px} /* 34 → 30 */
+  .day-bar-wrap{min-width:30px;padding:0 2px}
 }
 </style>
 </head>
 <body>
-  <!-- ① 状态栏毛玻璃层：固定，只盖住状态栏那一小块 -->
-  <div class="status-glass"></div>
+<div class="status-glass"></div>
 
-  <!-- ② 地址栏：在文档流中，随页面滚动 -->
-  <div class="top">
-    <div class="loc" id="loc">定位加载中…</div>
-    <div class="top-right">
-      <div class="muted" id="upd">正在更新…</div>
-      <button class="settings-btn" aria-label="设置" onclick="openSettings()">⚙</button>
-    </div>
+<div class="top">
+  <div class="loc" id="loc">定位加载中…</div>
+  <div class="top-right">
+    <div class="muted" id="upd">正在更新…</div>
+    <button class="settings-btn" aria-label="设置" onclick="openSettings()">⚙</button>
   </div>
+</div>
 
-  <main class="page">
-    <div id="app">加载中…</div>
-  </main>
+<main class="page">
+  <div id="app">加载中…</div>
+</main>
 
 <script>
-/* ============================================================
- *  以下为页面逻辑，一般不用改。配置已经在 <head> 里。
- * ============================================================ */
+/* ================================================================
+   一、全局常量与工具
+   ================================================================ */
+
+/* ---- 1.1 SVG 图标 ---- */
 
 const SUNRISE_ICON=`<svg viewBox="0 0 22 16" width="18" height="14" fill="none">
   <line x1="1" y1="13" x2="21" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
@@ -312,6 +456,7 @@ const UV_ICON = `<svg viewBox="0 0 24 24" fill="none"
   <line x1="16.8" y1="7.2" x2="18.7" y2="5.3"/>
 </svg>`;
 
+/* ---- 1.2 天气状况映射表 ---- */
 const SM={
   CLEAR_DAY:['☀️','晴'],CLEAR_NIGHT:['🌙','晴'],
   PARTLY_CLOUDY_DAY:['🌤️','多云'],PARTLY_CLOUDY_NIGHT:['🌙','多云'],
@@ -323,10 +468,11 @@ const SM={
   FOG:['🌫️','雾'],HAZE:['😷','霾'],WIND:['💨','大风']
 };
 
-const $=id=>document.getElementById(id);
-const num=(x,d=0)=>Number.isFinite(Number(x))?Number(x):d;
-const sky=x=>SM[x]||['☁️',x||'未知'];
-const pct=x=>Math.round(num(x)*100);
+/* ---- 1.3 通用函数 ---- */
+const $   = id => document.getElementById(id);
+const num = (x,d=0) => Number.isFinite(Number(x)) ? Number(x) : d;
+const sky = x => SM[x] || ['☁️', x || '未知'];
+const pct = x => Math.round(num(x)*100);
 
 function jsonp(url){
   return new Promise((ok,no)=>{
@@ -348,18 +494,21 @@ function windLevel(v){
   let i=0;for(let j=0;j<a.length;j++) if(v>=a[j]) i=j;
   return i+'级 · '+v.toFixed(1)+' km/h · '+n[i]+'';
 }
+
 function windDir(v){
   v=num(v);
   const dirs=['北风','东北风','东风','东南风','南风','西南风','西风','西北风'];
   const idx=Math.round(((v%360)+360)%360/45)%8;
   return dirs[idx];
 }
+
 function temp(d){
   if(!d) return [0,0];
   if(d.min!=null && d.max!=null) return [num(d.min), num(d.max)];
   if(d.temperature) return [num(d.temperature.min), num(d.temperature.max)];
   return [0,0];
 }
+
 function ds(d){
   if(d==null) return 'CLOUDY';
   if(typeof d==='string') return d;
@@ -368,12 +517,14 @@ function ds(d){
   if(typeof d.value==='string') return d.value;
   return 'CLOUDY';
 }
+
 function dayName(x,i){
   if(i===0) return '今天'; if(i===1) return '明天'; if(i===2) return '后天';
   const d=new Date(x);
   if(isNaN(d.getTime())) return '';
   return ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
 }
+
 function mdStr(x){
   if(!x) return '';
   const d=new Date(x);
@@ -384,7 +535,9 @@ function mdStr(x){
   }
   return `${d.getMonth()+1}/${d.getDate()}`;
 }
-function hTime(x){return x.datetime || x.time;}
+
+function hTime(x){ return x.datetime || x.time; }
+
 function hasRainInHours(hp, hours){
   if(!Array.isArray(hp)||!hp.length) return false;
   const n=Math.min(hours, hp.length);
@@ -394,23 +547,30 @@ function hasRainInHours(hp, hours){
   return false;
 }
 
-/* ============ 逐时图表 ============ */
-let chartObj=null, chartRange=[0,1], chartTimes=[], chartCount=0;
+/* ================================================================
+   二、逐时图表（温度折线 + 湿度行 + 日期徽章）
+   ================================================================ */
 
-const HUM_ROW_RATIO=0.22;
-const TEMP_TOP_PCT=0.42;
-const TEMP_SPAN_PCT=0.22;
+let chartObj = null;
+let chartRange = [0,1];
+let chartTimes = [];
+let chartCount = 0;
 
-const tempLabelPlugin={
+const HUM_ROW_RATIO  = 0.22;
+const TEMP_TOP_PCT   = 0.42;
+const TEMP_SPAN_PCT  = 0.22;
+
+/* 温度数值标签：在每个数据点上方画「22°」 */
+const tempLabelPlugin = {
   id:'tempLabelPlugin',
   afterDatasetsDraw(chart){
-    const idx=chart.data.datasets.findIndex(d=>d.label==='气温');
+    const idx = chart.data.datasets.findIndex(d=>d.label==='气温');
     if(idx<0) return;
-    const meta=chart.getDatasetMeta(idx);
+    const meta = chart.getDatasetMeta(idx);
     if(!meta||!meta.data) return;
-    const arr=chart.data.datasets[idx].data;
-    const ctx=chart.ctx;
-    const area=chart.chartArea;
+    const arr = chart.data.datasets[idx].data;
+    const ctx = chart.ctx;
+    const area = chart.chartArea;
     ctx.save();
     ctx.font='700 12px system-ui,-apple-system,sans-serif';
     ctx.fillStyle='#ffc271';
@@ -424,17 +584,18 @@ const tempLabelPlugin={
   }
 };
 
-const humidityRowPlugin={
+/* 湿度数值行：在图表下半部分固定高度画「65%」 */
+const humidityRowPlugin = {
   id:'humidityRowPlugin',
   afterDatasetsDraw(chart){
-    const idx=chart.data.datasets.findIndex(d=>d.label==='湿度');
+    const idx = chart.data.datasets.findIndex(d=>d.label==='湿度');
     if(idx<0) return;
-    const meta=chart.getDatasetMeta(idx);
+    const meta = chart.getDatasetMeta(idx);
     if(!meta||!meta.data||!meta.data.length) return;
-    const arr=chart.data.datasets[idx].data;
-    const ctx=chart.ctx;
-    const area=chart.chartArea;
-    const rowY=area.bottom-(area.bottom-area.top)*HUM_ROW_RATIO;
+    const arr = chart.data.datasets[idx].data;
+    const ctx = chart.ctx;
+    const area = chart.chartArea;
+    const rowY = area.bottom - (area.bottom - area.top) * HUM_ROW_RATIO;
 
     ctx.save();
     ctx.font='600 12px system-ui,-apple-system,sans-serif';
@@ -450,83 +611,82 @@ const humidityRowPlugin={
 };
 
 function drawChart(hourly){
-  const temps=(hourly.temperature||[]).slice(0,48);
-  const hums =(hourly.humidity   ||[]).slice(0,48);
-  const precs=(hourly.precipitation||[]).slice(0,48);
-  const cv=$('chart');
-  if(!cv||!temps.length) return;
+  const temps = (hourly.temperature    || []).slice(0,48);
+  const hums  = (hourly.humidity       || []).slice(0,48);
+  const precs = (hourly.precipitation  || []).slice(0,48);
+  const cv = $('chart');
+  if(!cv || !temps.length) return;
 
-  chartTimes=temps.map(x=>hTime(x));
-  chartCount=temps.length;
+  chartTimes = temps.map(x=>hTime(x));
+  chartCount = temps.length;
 
-  const labels=temps.map(x=>{
-    const d=new Date(hTime(x));
-    return isNaN(d.getTime())?'--:--':String(d.getHours()).padStart(2,'0')+':00';
+  const labels = temps.map(x=>{
+    const d = new Date(hTime(x));
+    return isNaN(d.getTime()) ? '--:--' : String(d.getHours()).padStart(2,'0')+':00';
   });
-  const tvals=temps.map(x=>num(x.value));
-  const hvals=hums.length?hums.map(x=>pct(x.value)):null;
-  const pvals=precs.map(x=>num(x.value));
+  const tvals = temps.map(x=>num(x.value));
+  const hvals = hums.length ? hums.map(x=>pct(x.value)) : null;
+  const pvals = precs.map(x=>num(x.value));
 
-  const tMin=Math.min(...tvals);
-  const tMax=Math.max(...tvals);
-  const tSpan=Math.max(tMax-tMin, 1.5);
-  const range=tSpan/TEMP_SPAN_PCT;
-  const yMax=tMax+TEMP_TOP_PCT*range;
-  const yMin=yMax-range;
+  const tMin = Math.min(...tvals);
+  const tMax = Math.max(...tvals);
+  const tSpan = Math.max(tMax - tMin, 1.5);
+  const range = tSpan / TEMP_SPAN_PCT;
+  const yMax = tMax + TEMP_TOP_PCT * range;
+  const yMin = yMax - range;
 
-  const pMax=Math.max(...pvals,0.1);
-  chartRange=[yMin,yMax];
+  const pMax = Math.max(...pvals, 0.1);
+  chartRange = [yMin, yMax];
 
-  if(chartObj){chartObj.destroy();chartObj=null;}
+  if(chartObj){ chartObj.destroy(); chartObj = null; }
 
-  const datasets=[
-    {type:'bar',label:'降水',data:pvals,yAxisID:'y1',
-     backgroundColor:'#4ebcff33',borderColor:'#4ebcff77',borderWidth:1,
-     borderRadius:3,barPercentage:.6,order:3},
-    {type:'line',label:'气温',data:tvals,yAxisID:'y',
-     borderColor:'#ffb34f',borderWidth:2.6,
-     pointRadius:4,pointHoverRadius:6,
-     pointBackgroundColor:'#ffb34f',
-     pointBorderColor:'#0b1e3a',pointBorderWidth:1.6,
-     tension:.4,fill:true,order:1,
-     backgroundColor:c=>{
-       const a=c.chart.chartArea, cc=c.chart.ctx;
-       if(!a) return 'rgba(255,179,79,.15)';
-       const g=cc.createLinearGradient(0,a.top,0,a.bottom);
-       g.addColorStop(0,'rgba(255,179,79,.22)');
-       g.addColorStop(1,'rgba(255,179,79,0)');
-       return g;
-     }}
+  const datasets = [
+    { type:'bar', label:'降水', data:pvals, yAxisID:'y1',
+      backgroundColor:'#4ebcff33', borderColor:'#4ebcff77', borderWidth:1,
+      borderRadius:3, barPercentage:.6, order:3 },
+    { type:'line', label:'气温', data:tvals, yAxisID:'y',
+      borderColor:'#ffb34f', borderWidth:2.6,
+      pointRadius:4, pointHoverRadius:6,
+      pointBackgroundColor:'#ffb34f',
+      pointBorderColor:'#0b1e3a', pointBorderWidth:1.6,
+      tension:.4, fill:true, order:1,
+      backgroundColor:c=>{
+        const a = c.chart.chartArea, cc = c.chart.ctx;
+        if(!a) return 'rgba(255,179,79,.15)';
+        const g = cc.createLinearGradient(0, a.top, 0, a.bottom);
+        g.addColorStop(0,'rgba(255,179,79,.22)');
+        g.addColorStop(1,'rgba(255,179,79,0)');
+        return g;
+      }}
   ];
-
   if(hvals){
     datasets.push({
-      type:'line',label:'湿度',data:hvals,yAxisID:'y2',
-      borderColor:'transparent',pointRadius:0,fill:false,order:2
+      type:'line', label:'湿度', data:hvals, yAxisID:'y2',
+      borderColor:'transparent', pointRadius:0, fill:false, order:2
     });
   }
 
-  chartObj=new Chart(cv,{
-    data:{labels,datasets},
+  chartObj = new Chart(cv, {
+    data:{ labels, datasets },
     options:{
-      responsive:true,maintainAspectRatio:false,
-      animation:{duration:0},
+      responsive:true, maintainAspectRatio:false,
+      animation:{ duration:0 },
       events:[],
-      interaction:{mode:null,intersect:false},
-      layout:{padding:{top:16,right:14,bottom:2,left:0}},
+      interaction:{ mode:null, intersect:false },
+      layout:{ padding:{ top:16, right:14, bottom:2, left:0 } },
       plugins:{
-        legend:{display:false},
-        tooltip:{enabled:false}
+        legend:{ display:false },
+        tooltip:{ enabled:false }
       },
       scales:{
-        x:{grid:{display:false},
-           ticks:{color:'#b9cee0',maxRotation:0,autoSkip:true,maxTicksLimit:24,font:{size:11}}},
-        y:{display:false,min:yMin,max:yMax},
-        y1:{display:false,min:0,max:pMax*4,position:'right'},
-        y2:{display:false,min:0,max:100,position:'right'}
+        x:{ grid:{display:false},
+            ticks:{ color:'#b9cee0', maxRotation:0, autoSkip:true, maxTicksLimit:24, font:{size:11} } },
+        y:{  display:false, min:yMin, max:yMax },
+        y1:{ display:false, min:0, max:pMax*4, position:'right' },
+        y2:{ display:false, min:0, max:100, position:'right' }
       }
     },
-    plugins:[tempLabelPlugin, humidityRowPlugin]
+    plugins:[ tempLabelPlugin, humidityRowPlugin ]
   });
 
   requestAnimationFrame(paintYAxisLabels);
@@ -534,61 +694,62 @@ function drawChart(hourly){
 }
 
 function paintYAxisLabels(){
-  if(!chartObj||!chartObj.chartArea) return;
-  const area=chartObj.chartArea;
-  const el=$('yaxis'); if(!el) return;
-  const tempCenter=TEMP_TOP_PCT+TEMP_SPAN_PCT/2;
-  const tempY=area.top+(area.bottom-area.top)*tempCenter;
-  const humY=area.bottom-(area.bottom-area.top)*HUM_ROW_RATIO;
-  el.innerHTML=
-    `<span class="lbl-temp" style="top:${tempY.toFixed(1)}px">温度</span>`+
+  if(!chartObj || !chartObj.chartArea) return;
+  const area = chartObj.chartArea;
+  const el = $('yaxis'); if(!el) return;
+  const tempCenter = TEMP_TOP_PCT + TEMP_SPAN_PCT/2;
+  const tempY = area.top + (area.bottom - area.top) * tempCenter;
+  const humY  = area.bottom - (area.bottom - area.top) * HUM_ROW_RATIO;
+  el.innerHTML =
+    `<span class="lbl-temp" style="top:${tempY.toFixed(1)}px">温度</span>` +
     `<span class="lbl-hum"  style="top:${humY.toFixed(1)}px">湿度</span>`;
 }
 
 function bindHourlyScroll(){
-  const scroller=document.getElementById('chartScroll');
-  const badge=document.getElementById('hourlyDate');
-  if(!scroller||!badge) return;
+  const scroller = document.getElementById('chartScroll');
+  const badge    = document.getElementById('hourlyDate');
+  if(!scroller || !badge) return;
 
-  const update=()=>{
+  const update = ()=>{
     if(!chartTimes.length) return;
-    const totalW=scroller.firstElementChild
-      ? scroller.firstElementChild.offsetWidth : 1440;
-    const innerW=totalW-14;
-    const spacing=innerW/Math.max(chartCount-1,1);
+    const totalW  = scroller.firstElementChild ? scroller.firstElementChild.offsetWidth : 1440;
+    const innerW  = totalW - 14;
+    const spacing = innerW / Math.max(chartCount-1, 1);
+    const idx = Math.max(0, Math.min(chartCount-1, Math.floor(scroller.scrollLeft / spacing)));
 
-    const idx=Math.max(0,Math.min(chartCount-1,
-      Math.floor(scroller.scrollLeft/spacing)));
-
-    const d=new Date(chartTimes[idx]);
+    const d = new Date(chartTimes[idx]);
     if(isNaN(d.getTime())) return;
-    const dn=['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
-    badge.textContent=`${d.getMonth()+1}/${d.getDate()} ${dn}`;
+    const dn = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+    badge.textContent = `${d.getMonth()+1}/${d.getDate()} ${dn}`;
   };
 
-  scroller.onscroll=update;
+  scroller.onscroll = update;
   update();
 }
 
-let resizeTimer=null;
-window.addEventListener('resize',()=>{
+let resizeTimer = null;
+window.addEventListener('resize', ()=>{
   clearTimeout(resizeTimer);
-  resizeTimer=setTimeout(()=>{
+  resizeTimer = setTimeout(()=>{
     if(chartObj) requestAnimationFrame(()=>{
       paintYAxisLabels();
       bindHourlyScroll();
     });
-  },120);
+  }, 120);
 });
 
-/* ============ 降水预报 ============ */
+/* ================================================================
+   三、降水预报板块
+   ================================================================ */
+
 function rainLevel(v){
-  if(v<0.031) return 'none';
-  if(v<0.25)  return 'light';
-  if(v<0.35)  return 'mid';
-  if(v<0.48)  return 'heavy';
+  if(v < 0.031) return 'none';
+  if(v < 0.25)  return 'light';
+  if(v < 0.35)  return 'mid';
+  if(v < 0.48)  return 'heavy';
   return 'storm';
 }
+
 function buildBars(values, maxV){
   return values.map(v=>{
     if(v < 0.031) return `<i style="height:4%"></i>`;
@@ -611,11 +772,11 @@ function renderRainSection(r){
 
   if(hasMinutelyRain){
     const desc = minutely.description || '未来两小时降水情况';
-    const buckets=[];
+    const buckets = [];
     for(let i=0;i<120;i+=5){
-      let sum=0,n=0;
-      for(let j=i;j<i+5 && j<md.length;j++){ sum+=num(md[j]); n++; }
-      buckets.push(n?sum/n:0);
+      let sum=0, n=0;
+      for(let j=i;j<i+5 && j<md.length;j++){ sum += num(md[j]); n++; }
+      buckets.push(n ? sum/n : 0);
     }
     const maxRain = Math.max(...buckets, 0.3);
     const bars = buildBars(buckets, maxRain);
@@ -640,8 +801,8 @@ function renderRainSection(r){
   const maxRain = Math.max(...vals, 0.3);
   const bars = buildBars(vals, maxRain);
   const now = new Date();
-  const last = new Date(now.getTime()+23*3600*1000);
-  const lastLabel = last.getDate()===now.getDate()
+  const last = new Date(now.getTime() + 23*3600*1000);
+  const lastLabel = last.getDate() === now.getDate()
     ? last.getHours()+' 时'
     : '次日 '+last.getHours()+' 时';
 
@@ -661,52 +822,60 @@ function openSettings(){
   if(NATIVE_CONFIG && NATIVE_CONFIG.openSettings) NATIVE_CONFIG.openSettings();
 }
 
-/* ============ 主渲染 ============ */
+/* ================================================================
+   四、主渲染（拼装整个页面）
+   ================================================================ */
+
 function draw(d){
-  const r=d.result||{};
-  const rt=r.realtime||{}, h=r.hourly||{}, dy=r.daily||{};
+  const r  = d.result || {};
+  const rt = r.realtime || {};
+  const h  = r.hourly   || {};
+  const dy = r.daily    || {};
 
-  const dayTemps = dy.temperature   || [];
-  const daySky   = dy.skycon        || [];
-  const dayAstro = dy.astro         || [];
+  const dayTemps = dy.temperature || [];
+  const daySky   = dy.skycon      || [];
+  const dayAstro = dy.astro       || [];
 
-  const today = temp(dayTemps[0]);
-  const s = sky(rt.skycon);
-  const w = rt.wind||{};
-  const aq= rt.air_quality||{};
-  const vis = num(rt.visibility);
-  const cloud = pct(rt.cloudrate);
-  const aqiChn= aq.aqi?.chn ?? '--';
-  const aqiDesc= aq.description?.chn||'';
+  /* ---- 4.1 提取常用字段 ---- */
+  const today   = temp(dayTemps[0]);
+  const s       = sky(rt.skycon);
+  const w       = rt.wind || {};
+  const aq      = rt.air_quality || {};
+  const vis     = num(rt.visibility);
+  const cloud   = pct(rt.cloudrate);
+  const aqiChn  = aq.aqi?.chn ?? '--';
+  const aqiDesc = aq.description?.chn || '';
 
-  const astro=dayAstro[0]||{};
-  const sr=astro.sunrise?.time||'—';
-  const ss=astro.sunset?.time||'—';
+  const astro = dayAstro[0] || {};
+  const sr = astro.sunrise?.time || '—';
+  const ss = astro.sunset?.time  || '—';
 
+  /* ---- 4.2 紫外线：优先实时，回退当天最大值 ---- */
   let uvIdx = null;
   const rtUV = rt.life_index && rt.life_index.ultraviolet;
   const dailyUVArr = (dy.life_index && dy.life_index.ultraviolet) || [];
-
   if(rtUV && rtUV.index != null){
     uvIdx = Number(rtUV.index);
   }else if(dailyUVArr[0] && dailyUVArr[0].index != null){
     uvIdx = Number(dailyUVArr[0].index);
   }
-
   const uvBadge = (uvIdx !== null && isFinite(uvIdx))
     ? `<span class="uv-badge">${UV_ICON}紫外线<b>${uvIdx}</b></span>`
     : '';
 
-  $('loc').textContent=PLACE_NAME;
-  $('upd').textContent='↻ 更新 '+new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  /* ---- 4.3 更新顶部地址栏 ---- */
+  $('loc').textContent = PLACE_NAME;
+  $('upd').textContent = '↻ 更新 ' + new Date().toLocaleTimeString('zh-CN',{hour12:false});
 
-  const hero=`<section class="hero card">
+  /* ---- 4.4 主天气区 ---- */
+  const hero = `<section class="hero card">
     <div class="hero-temp">${rt.temperature!=null?num(rt.temperature).toFixed(1):'--'}<small>°</small></div>
     <div class="hero-sky"><span class="hero-icon">${s[0]}</span><span>${s[1]}</span></div>
     <div class="hero-range">最高 ${today[1].toFixed(1)}° · 最低 ${today[0].toFixed(1)}°</div>
   </section>`;
 
-  const metrics=[
+  /* ---- 4.5 六张实时指标卡片 ---- */
+  const metrics = [
     `<div class="card metric">
        <div class="mi">🌡️</div>
        <div><div class="ml">体感</div><div class="mv">${num(rt.apparent_temperature).toFixed(1)}°</div><div class="ms">体感温度</div></div>
@@ -750,40 +919,39 @@ function draw(d){
      </div>`
   ].join('');
 
-  const count=Math.min(dayTemps.length,3);
-  const slice=dayTemps.slice(0,count);
-  const allLo=Math.min(...slice.map(x=>temp(x)[0]));
-  const allHi=Math.max(...slice.map(x=>temp(x)[1]));
-  const span=Math.max(allHi-allLo,1);
+  /* ---- 4.6 未来三天 ---- */
+  const count = Math.min(dayTemps.length, 3);
+  const slice = dayTemps.slice(0, count);
+  const allLo = Math.min(...slice.map(x=>temp(x)[0]));
+  const allHi = Math.max(...slice.map(x=>temp(x)[1]));
+  const span  = Math.max(allHi - allLo, 1);
 
-  let dayRows='';
-  for(let i=0;i<count;i++){
-    const t=dayTemps[i];
-    const z=temp(t);
+  let dayRows = '';
+  for(let i=0; i<count; i++){
+    const t  = dayTemps[i];
+    const z  = temp(t);
     const dateKey = t.date || t.fxDate;
-    const q = sky(ds(daySky[i]));
+    const q  = sky(ds(daySky[i]));
     const week = dayName(dateKey, i);
-    const md = mdStr(dateKey);
+    const md   = mdStr(dateKey);
 
-    const left  = ((z[0]-allLo)/span)*100;
-    const width = ((z[1]-z[0])/span)*100;
+    const left  = ((z[0]-allLo)/span) * 100;
+    const width = ((z[1]-z[0])/span) * 100;
 
-    let marker='';
+    let marker = '';
     if(i===0 && rt.temperature!=null){
-      const cur=num(rt.temperature);
-      const pos=((cur - z[0]) / Math.max(z[1]-z[0],0.01));
+      const cur = num(rt.temperature);
+      const pos = (cur - z[0]) / Math.max(z[1]-z[0], 0.01);
       if(pos>=0 && pos<=1){
-        marker=`<span class="day-marker" style="left:${(pos*100).toFixed(1)}%"></span>`;
+        marker = `<span class="day-marker" style="left:${(pos*100).toFixed(1)}%"></span>`;
       }
     }
 
-    dayRows+=`<div class="day-row">
+    dayRows += `<div class="day-row">
       <div class="day-label">
-        <div class="dl-top">
-          <b>${week}</b>
-          <span>${md}</span>
-        </div>
-        <div class="dl-bot">${q[1]}</div>
+        <b>${week}</b>
+        <span class="dl-md">${md}</span>
+        <span class="dl-cond">${q[1]}</span>
       </div>
       <div class="day-icon">${q[0]}</div>
       <div class="day-lo">${z[0].toFixed(1)}°</div>
@@ -797,14 +965,17 @@ function draw(d){
     </div>`;
   }
 
+  /* ---- 4.7 逐时预报板块上的「无降水」徽章 ---- */
   const hasRain24h = hasRainInHours(h.precipitation, 24);
   const noRainBadge = hasRain24h ? '' :
     `<span class="no-rain-badge">未来短时间内<b>无降水</b></span>`;
 
-  const html=
-    hero+
-    `<section class="grid">${metrics}</section>`+
-    renderRainSection(r)+
+  /* ---- 4.8 拼装整页 HTML ---- */
+  /* 顺序：主天气 → 实时指标 → 降水预报 → 逐时预报 → 未来48小时 → 页脚 */
+  const html =
+    hero +
+    `<section class="grid">${metrics}</section>` +
+    renderRainSection(r) +
     `<section class="card section">
        <div class="hourly-head">
          <div class="htitle">逐时预报</div>
@@ -820,16 +991,20 @@ function draw(d){
            <div class="chartbox"><canvas id="chart"></canvas></div>
          </div>
        </div>
-     </section>`+
+     </section>` +
     `<section class="card section">
        <div class="st"><span>未来 48 小时天气</span></div>
        <div class="days-v">${dayRows}</div>
-     </section>`+
+     </section>` +
     `<div class="foot">彩云天气API · 实况 + 逐时预报 + 未来48小时天气。每 ${REFRESH_MIN} 分钟自动刷新。</div>`;
 
-  $('app').innerHTML=html;
+  $('app').innerHTML = html;
   drawChart(h);
 }
+
+/* ================================================================
+   五、本地缓存
+   ================================================================ */
 
 const WEATHER_CACHE_KEY = 'caiyun_weather_cache_v1';
 
@@ -858,7 +1033,6 @@ function showCachedWeather(){
   const cache = readWeatherCache();
   if(!cache) return false;
   try{
-    // 缓存优先：先把上次完整天气直接画出来，再让后台请求更新。
     draw(cache.data);
     return true;
   }catch(e){
@@ -866,9 +1040,13 @@ function showCachedWeather(){
   }
 }
 
+/* ================================================================
+   六、加载 / 刷新入口
+   ================================================================ */
+
 let nativeWeatherWaiters = [];
-let nativeWeatherTimer = null;
-let hasVisibleWeather = false;
+let nativeWeatherTimer   = null;
+let hasVisibleWeather    = false;
 
 window.onNativeWeatherResult = function(jsonText){
   try {
@@ -888,12 +1066,11 @@ window.onNativeWeatherResult = function(jsonText){
 window.onNativeWeatherError = function(message){
   const waiters = nativeWeatherWaiters.splice(0);
   if(nativeWeatherTimer){ clearTimeout(nativeWeatherTimer); nativeWeatherTimer=null; }
-  // 有缓存时保留旧天气，不要因为一次网络/定位失败把已经显示的页面清空。
   if(hasVisibleWeather || readWeatherCache()){
     waiters.forEach(resolve=>resolve(false));
     return;
   }
-  $('app').innerHTML='<div class="card err">天气数据获取失败：'+String(message||'API请求失败')+
+  $('app').innerHTML = '<div class="card err">天气数据获取失败：'+String(message||'API请求失败')+
     '<br>请检查 API Key、API 地址和经纬度。</div>';
   waiters.forEach(resolve=>resolve(false));
 };
@@ -903,7 +1080,6 @@ async function load(options){
   try {
     syncNativeConfig();
 
-    // 正常启动：缓存立即显示；随后继续后台请求。
     if(!hasVisibleWeather) hasVisibleWeather = showCachedWeather();
 
     if(!CAIYUN.trim()) throw Error('尚未填写 API Key，请进入右上角“设置”填写。');
@@ -913,35 +1089,39 @@ async function load(options){
       return await new Promise(resolve=>{
         nativeWeatherWaiters.push(resolve);
         if(!nativeWeatherTimer){
-          nativeWeatherTimer=setTimeout(()=>window.onNativeWeatherError('请求超时，请检查网络连接或 API 设置'),20000);
+          nativeWeatherTimer = setTimeout(
+            ()=>window.onNativeWeatherError('请求超时，请检查网络连接或 API 设置'),
+            20000
+          );
         }
         try {
-          const started=window.NativeWeather.requestWeather();
-          if(started===false) window.onNativeWeatherError('无法启动天气请求');
+          const started = window.NativeWeather.requestWeather();
+          if(started === false) window.onNativeWeatherError('无法启动天气请求');
         } catch(e) {
           window.onNativeWeatherError(e.message || '无法启动天气请求');
         }
       });
     }
 
-  // Browser fallback for previewing the HTML outside the Android app.
-  try{
-    const base=String(API_BASE||'').replace(/\/+$/,'');
-    const url=`${base}/${CAIYUN}/${LOCATION}/weather?dailysteps=3&hourlysteps=48&lang=zh_CN`;
-    const d=await jsonp(url);
-    if(!d||d.status!=='ok') throw Error((d&&(d.error||d.message))||'API返回异常');
-    draw(d);
-    return true;
-  }catch(e){
-    if(!hasVisibleWeather) {
-      $('app').innerHTML='<div class="card err">天气数据获取失败：'+e.message+
-        '<br>请检查 API Key、API 地址和经纬度。</div>';
+    try{
+      const base = String(API_BASE||'').replace(/\/+$/,'');
+      const url = `${base}/${CAIYUN}/${LOCATION}/weather?dailysteps=3&hourlysteps=48&lang=zh_CN`;
+      const d = await jsonp(url);
+      if(!d || d.status !== 'ok') throw Error((d && (d.error||d.message)) || 'API返回异常');
+      draw(d);
+      return true;
+    }catch(e){
+      if(!hasVisibleWeather) {
+        $('app').innerHTML = '<div class="card err">天气数据获取失败：'+e.message+
+          '<br>请检查 API Key、API 地址和经纬度。</div>';
+      }
+      return false;
     }
-    return false;
-  }
   } catch(e) {
     if(!hasVisibleWeather) {
-      $('app').innerHTML='<div class="card err">天气数据获取失败：'+String(e && e.message || 'API请求失败')+'<br>请检查 API Key、API 地址和经纬度。</div>';
+      $('app').innerHTML = '<div class="card err">天气数据获取失败：'+
+        String(e && e.message || 'API请求失败')+
+        '<br>请检查 API Key、API 地址和经纬度。</div>';
     }
     return false;
   }
@@ -957,7 +1137,7 @@ window.refreshWeather = async function(){
   }
 };
 
-let autoRefreshTimer = null;
+let autoRefreshTimer  = null;
 let autoRefreshPaused = false;
 
 function scheduleAutoRefresh(){
@@ -983,7 +1163,9 @@ window.resumeAutoRefresh = function(){
   scheduleAutoRefresh();
 };
 
-// 首次进入：先显示本地缓存，再后台请求最新天气。
+/* ================================================================
+   七、启动
+   ================================================================ */
 load({background:true});
 scheduleAutoRefresh();
 </script>
