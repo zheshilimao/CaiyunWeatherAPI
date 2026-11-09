@@ -97,6 +97,10 @@ body{
 .hero-sky{display:flex;align-items:center;gap:10px;font-size:24px;font-weight:650;margin-top:6px}
 .hero-icon{font-size:40px;line-height:1}
 .hero-range{margin-top:12px;font-size:16px;color:#c2d4e5;letter-spacing:.5px}
+.hero-icon svg {
+  width: 1em;
+  height: 1em;
+}
 
 /* 实时指标 */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
@@ -148,6 +152,13 @@ body{
   padding:5px 11px;border-radius:9px;
   font-size:13px;font-weight:600;letter-spacing:.2px;
 }
+.no-rain-badge{
+  display:inline-flex;align-items:center;flex:0 0 auto;white-space:nowrap;
+  background:rgba(255,255,255,.07);color:#aac2d7;
+  padding:5px 11px;border-radius:9px;
+  font-size:13px;font-weight:600;letter-spacing:.2px;
+}
+.no-rain-badge b{color:#9ce8ff;font-weight:700}
 .uv-badge{
   display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;white-space:nowrap;
   background:rgba(255,180,80,.14);color:#ffc271;
@@ -174,16 +185,25 @@ body{
 .chart-scroll::-webkit-scrollbar{display:none}
 .chartbox{height:190px;width:1440px;position:relative}
 
-/* 逐时降水提示 / 带伞提示 */
-.rain-chip{
-  display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;white-space:nowrap;
-  padding:5px 10px;border-radius:9px;
-  font-size:12.5px;font-weight:600;letter-spacing:.2px;
-  background:rgba(78,188,255,.13);color:#9ce8ff;
+/* 降水预报 */
+.rain-desc{font-size:15px;font-weight:650;color:#9ce8ff;margin-bottom:16px;line-height:1.4}
+.rain-bars{display:flex;align-items:flex-end;gap:2px;height:82px}
+.rain-bars i{
+  flex:1;border-radius:2px 2px 0 0;min-height:2px;
+  transition:height .4s ease;background:#ffffff14;
 }
-.rain-chip .rn-ico{font-size:13px;line-height:1}
-.rain-chip b{color:#4ebcff;font-weight:800}
-.rain-chip.dry{background:rgba(255,255,255,.07);color:#aac2d7}
+.rain-bars .light{background:#6fd4ff}
+.rain-bars .mid  {background:#4ebcff}
+.rain-bars .heavy{background:#3a8eff}
+.rain-bars .storm{background:#7b6bff}
+.rain-scale{
+  display:flex;justify-content:space-between;
+  font-size:12px;color:#aac2d7;margin-top:8px;
+}
+.rain-hint{
+  margin-top:12px;font-size:13px;color:#aac2d7;
+  padding-top:10px;border-top:1px solid #ffffff10;
+}
 
 /* 未来 48 小时 */
 .days-v{display:flex;flex-direction:column}
@@ -255,10 +275,10 @@ body{
   .metric-sun .ms-times .sun-icon svg{width:14px;height:11px}
   .mi{width:36px;height:36px;flex:0 0 36px;font-size:17px}
   .mv{font-size:18px}
-  .rain-chip{font-size:12px;padding:4px 8px}
+  .rain-bars{height:64px}
   .st{font-size:16px}
   .hourly-head .htitle{font-size:16px}
-  .hourly-date,.uv-badge{font-size:12px;padding:4px 9px}
+  .hourly-date,.no-rain-badge,.uv-badge{font-size:12px;padding:4px 9px}
   .uv-badge svg{width:11px;height:11px}
   .uv-badge b{font-size:13px}
   .y-axis{flex:0 0 30px}
@@ -323,15 +343,98 @@ const UV_ICON = `<svg viewBox="0 0 24 24" fill="none"
   <line x1="16.8" y1="7.2" x2="18.7" y2="5.3"/>
 </svg>`;
 
-const SM={
-  CLEAR_DAY:['☀️','晴'],CLEAR_NIGHT:['🌙','晴'],
-  PARTLY_CLOUDY_DAY:['🌤️','多云'],PARTLY_CLOUDY_NIGHT:['🌙','多云'],
-  CLOUDY:['☁️','阴'],
-  LIGHT_RAIN:['🌦️','小雨'],MODERATE_RAIN:['🌧️','中雨'],
-  HEAVY_RAIN:['🌧️','大雨'],STORM_RAIN:['⛈️','暴雨'],
-  LIGHT_SNOW:['🌨️','小雪'],MODERATE_SNOW:['❄️','中雪'],
-  HEAVY_SNOW:['❄️','大雪'],STORM_SNOW:['🌨️','暴雪'],
-  FOG:['🌫️','雾'],HAZE:['😷','霾'],WIND:['💨','大风']
+/* ===== 新增天气情况SVG 图标：雾 / 霾 / 浮尘 / 沙尘 / 雷阵雨 / 冰雹 / 雨夹雪 ===== */
+
+const FOG_ICON = `<svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#E3ECF5"/><path d="M4.5 20c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#BFC9D4" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+
+const LIGHT_HAZE_ICON = `<svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#AED8F5"/><path d="M4.5 20c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#D4A373" stroke-width="2" stroke-linecap="round"/></svg>`;
+
+const MODERATE_HAZE_ICON = `<svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#A9C6DD"/><path d="M4.5 16.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#C68A4E" stroke-width="2" stroke-linecap="round"/><path d="M4.5 19c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#C68A4E" stroke-width="2" stroke-linecap="round"/><path d="M4.5 21.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#C68A4E" stroke-width="2" stroke-linecap="round"/>
+</svg>`;
+
+const HEAVY_HAZE_ICON = `<svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#CFC9A8"/><path d="M4.5 16.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#8B5A2B" stroke-width="3" stroke-linecap="round"/><path d="M4.5 19c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#8B5A2B" stroke-width="3" stroke-linecap="round"/><path d="M4.5 21.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#8B5A2B" stroke-width="3" stroke-linecap="round"/>
+</svg>`;
+
+const DUST_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <circle cx="6" cy="9" r="1.3" fill="#D4A373"/>
+  <circle cx="10" cy="11" r="1.6" fill="#C2A878"/>
+  <circle cx="14" cy="8" r="1.1" fill="#D4A373"/>
+  <path d="M4.5 16c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" stroke="#C2A878" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M7 19.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0" stroke="#C2A878" stroke-width="1.2" stroke-linecap="round"/>
+</svg>`;
+
+const SAND_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <path d="M3 18Q7.5 15 12 18T21 18" fill="none" stroke="#C2A878" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M5 21Q9.5 18 14 21T21 21" fill="none" stroke="#C2A878" stroke-width="1.4" stroke-linecap="round"/>
+  <circle cx="6" cy="8" r="1.2" fill="#D4A373"/>
+  <circle cx="10" cy="5" r="0.9" fill="#D4A373"/>
+  <circle cx="14" cy="8" r="1.4" fill="#D4A373"/>
+  <circle cx="18" cy="5" r="1.1" fill="#D4A373"/>
+  <path d="M5 12c2-1.2 4-1.2 6 0s4-1.2 6 0" fill="none" stroke="#C2A878" stroke-width="1.3" stroke-linecap="round"/>
+</svg>`;
+
+const THUNDER_SHOWER_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#E3ECF5"/>
+  <path d="M13.5 8.5L9.8 14.5H12.2L10.8 19.5L15.5 12.5H13L14.5 8.5Z" fill="#FFD54F"/>
+  <path d="M5 19.5L3.5 22.5M8.5 20L7 23M15.5 19.5L14 22.5" stroke="#5B9BD5" stroke-width="1.3" stroke-linecap="round"/>
+</svg>`;
+
+const HAIL_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#E3ECF5"/>
+  <path d="M14 8.5L10 14.5H12.5L11 19.5L16 12.5H13.5L15 8.5Z" fill="#FFD54F"/>
+  <circle cx="5.5" cy="19" r="1.2" fill="#E9F0F8" stroke="#A0B8D0" stroke-width="0.5"/>
+  <circle cx="9.5" cy="21" r="1.4" fill="#E9F0F8" stroke="#A0B8D0" stroke-width="0.5"/>
+  <circle cx="16" cy="18.5" r="1.1" fill="#E9F0F8" stroke="#A0B8D0" stroke-width="0.5"/>
+  <circle cx="19" cy="21" r="1.3" fill="#E9F0F8" stroke="#A0B8D0" stroke-width="0.5"/>
+</svg>`;
+
+const SLEET_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#E3ECF5"/>
+  <path d="M4.5 19.5L3 22.5M8 20L6.5 23M11.5 19.5L10 22.5" stroke="#5B9BD5" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M14.8 19v2M13.8 20h2M14.1 19.3l1.4 1.4M14.1 20.7l1.4-1.4M17.2 19v2M16.2 20h2M16.5 19.3l1.4 1.4M16.5 20.7l1.4-1.4M19.6 19v2M18.6 20h2M18.9 19.3l1.4 1.4M18.9 20.7l1.4-1.4" stroke="#A6C8EA" stroke-width="1" stroke-linecap="round"/>
+</svg>`;
+
+/* ---- 1.2 天气状况映射表 ---- */
+const SM = {
+  // ☀️ 晴
+  CLEAR_DAY:           ['☀️', '晴'],
+  CLEAR_NIGHT:         ['🌙', '晴'],
+
+  // 🌤️ 多云
+  PARTLY_CLOUDY_DAY:   ['🌤️', '多云'],
+  PARTLY_CLOUDY_NIGHT: ['🌙', '多云'],
+  CLOUDY:              ['☁️', '阴'],
+
+  // 🌧️ 雨
+  LIGHT_RAIN:          ['🌦️', '小雨'],
+  MODERATE_RAIN:       ['🌧️', '中雨'],
+  HEAVY_RAIN:          ['🌧️', '大雨'],
+  STORM_RAIN:          ['⛈️', '暴雨'],
+
+  // ❄️ 雪
+  LIGHT_SNOW:          ['🌨️', '小雪'],
+  MODERATE_SNOW:       ['❄️', '中雪'],
+  HEAVY_SNOW:          ['❄️', '大雪'],
+  STORM_SNOW:          ['🌨️', '暴雪'],
+
+  // 🌫️ 雾 / 霾
+  FOG:                 [FOG_ICON,            '雾'],
+  LIGHT_HAZE:          [LIGHT_HAZE_ICON,     '轻度霾'],
+  MODERATE_HAZE:       [MODERATE_HAZE_ICON,  '中度霾'],
+  HEAVY_HAZE:          [HEAVY_HAZE_ICON,     '重度霾'],
+
+  // 🏜️ 浮尘 / 沙尘
+  DUST:                [DUST_ICON,            '浮尘'],
+  SAND:                [SAND_ICON,            '沙尘'],
+
+  // ⛈️ 雷阵雨 / 冰雹 / 雨夹雪
+  THUNDER_SHOWER:      [THUNDER_SHOWER_ICON,  '雷阵雨'],
+  HAIL:                [HAIL_ICON,            '冰雹'],
+  SLEET:               [SLEET_ICON,           '雨夹雪'],
+
+  // 💨 风
+  WIND:                ['💨', '大风'],
+  UNKNOWN:             ['❓', '未知']
 };
 
 const $   = id => document.getElementById(id);
@@ -384,6 +487,14 @@ function mdStr(x){
   return `${d.getMonth()+1}/${d.getDate()}`;
 }
 function hTime(x){ return x.datetime || x.time; }
+function hasRainInHours(hp, hours){
+  if(!Array.isArray(hp)||!hp.length) return false;
+  const n=Math.min(hours, hp.length);
+  for(let i=0;i<n;i++){
+    if(num(hp[i].value)>0.031) return true;
+  }
+  return false;
+}
 
 /* ================================================================
    二、逐时图表（与正式版一致）
@@ -567,88 +678,81 @@ window.addEventListener('resize', ()=>{
 });
 
 /* ================================================================
-   三、逐时降水提示 + 实时“带伞”提示（与正式版一致）
+   三、降水预报板块（与正式版一致）
    ================================================================ */
-function relHourLabel(x, now){
-  const d = new Date(x);
-  if(isNaN(d.getTime())) return '';
-  const hh = String(d.getHours()).padStart(2,'0') + '时';
-  const dayStart = t => new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
-  const dayDiff = Math.round((dayStart(d) - dayStart(now)) / 86400000);
-  const day = dayDiff <= 0 ? '今天'
-            : dayDiff === 1 ? '明天'
-            : dayDiff === 2 ? '后天'
-            : ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
-  return day + hh;
+function rainLevel(v){
+  if(v < 0.031) return 'none';
+  if(v < 0.25)  return 'light';
+  if(v < 0.35)  return 'mid';
+  if(v < 0.48)  return 'heavy';
+  return 'storm';
+}
+function buildBars(values, maxV){
+  return values.map(v=>{
+    if(v < 0.031) return `<i style="height:4%"></i>`;
+    const h = Math.max(10, Math.min(100, v/maxV*100));
+    return `<i class="${rainLevel(v)}" style="height:${h.toFixed(0)}%"></i>`;
+  }).join('');
 }
 
-function buildRainEvents(hp){
-  const events = [];
-  let cur = null;
-  for(let i=0;i<hp.length;i++){
-    const v = num(hp[i].value);
-    if(v > 0.031){
-      if(cur){ cur.end = i; cur.peak = Math.max(cur.peak, v); }
-      else cur = { start:i, end:i, peak:v };
-    }else if(cur){
-      events.push(cur); cur = null;
-    }
+function renderRainSection(r){
+  const minutely = r.minutely || {};
+  const md = minutely.precipitation_2h || [];
+  const hp = (r.hourly?.precipitation) || [];
+
+  const hasMinutelyRain = Array.isArray(md) && md.some(v=>num(v)>0.031);
+  const hasHourlyRain24 = hasRainInHours(hp, 24);
+
+  if(!hasMinutelyRain && !hasHourlyRain24){
+    return '';
   }
-  if(cur) events.push(cur);
-  return events;
-}
 
-function buildRainChips(r, umbrellaActive){
-  const hp = (r.hourly && r.hourly.precipitation) || [];
+  if(hasMinutelyRain){
+    const desc = minutely.description || '未来两小时降水情况';
+    const buckets = [];
+    for(let i=0;i<120;i+=5){
+      let sum=0, n=0;
+      for(let j=i;j<i+5 && j<md.length;j++){ sum += num(md[j]); n++; }
+      buckets.push(n ? sum/n : 0);
+    }
+    const maxRain = Math.max(...buckets, 0.3);
+    const bars = buildBars(buckets, maxRain);
+    const rainyHours = hp.filter(x=>num(x.value)>0.031).length;
+    const hint = rainyHours>0
+      ? `未来 48 小时内有 ${rainyHours} 个小时可能出现降水`
+      : '未来 48 小时无明显降水';
+
+    return `<section class="card section">
+      <div class="st"><span>降水预报</span><small>未来 2 小时 · 每格 5 分钟</small></div>
+      <div class="rain-desc">${desc}</div>
+      <div class="rain-bars">${bars}</div>
+      <div class="rain-scale">
+        <span>现在</span><span>30 分</span><span>1 时</span>
+        <span>1 时 30 分</span><span>2 时</span>
+      </div>
+      <div class="rain-hint">${hint}</div>
+    </section>`;
+  }
+
+  const vals = hp.slice(0,24).map(x=>num(x.value));
+  const maxRain = Math.max(...vals, 0.3);
+  const bars = buildBars(vals, maxRain);
   const now = new Date();
-  const events = buildRainEvents(hp);
-  const in24    = events.find(e=>e.start < 24);
-  const after24 = events.find(e=>e.start >= 24);
-  const chips = [];
+  const last = new Date(now.getTime() + 23*3600*1000);
+  const lastLabel = last.getDate() === now.getDate()
+    ? last.getHours()+' 时'
+    : '次日 '+last.getHours()+' 时';
 
-  /* 附近有雨而预报无降水时，措辞加上“预报/无明显”，与带伞提示保持一致 */
-  if(in24){
-    chips.push(`<span class="rain-chip"><span class="rn-ico">🌧️</span><b>${relHourLabel(hTime(hp[in24.start]), now)}</b>前后可能有雨</span>`);
-    if(after24){
-      chips.push(`<span class="rain-chip"><span class="rn-ico">🌧️</span><b>${relHourLabel(hTime(hp[after24.start]), now)}</b>前后可能有雨</span>`);
-    }
-  }else if(after24){
-    chips.push(`<span class="rain-chip dry"><span class="rn-ico">🌤️</span>${umbrellaActive?'预报未来24小时无明显降水':'未来24小时无降水'}</span>`);
-    chips.push(`<span class="rain-chip"><span class="rn-ico">🌧️</span><b>${relHourLabel(hTime(hp[after24.start]), now)}</b>前后可能有雨</span>`);
-  }else{
-    chips.push(`<span class="rain-chip dry"><span class="rn-ico">🌤️</span>${umbrellaActive?'预报未来48小时无明显降水':'未来48小时无降水'}</span>`);
-  }
-
-  return chips.join('');
-}
-
-/* 实时“带伞”提示：realtime.precipitation = { local:{intensity}, nearest:{distance, intensity} }
-   local  = 你所在位置此刻的雷达降水强度
-   nearest= 最近雨区：distance 公里 / intensity 强度（distance=10000 视为扫描范围内无雨） */
-function intensityWord(v){
-  if(v < 0.031) return '';
-  if(v < 0.25)  return '小雨';
-  if(v < 0.35)  return '中雨';
-  if(v < 0.48)  return '大雨';
-  return '暴雨';
-}
-
-function buildUmbrellaChip(rt, forecastDry48){
-  const p = rt && rt.precipitation;
-  if(!p) return '';
-  const localV = num(p.local && p.local.intensity);
-  const nV = num(p.nearest && p.nearest.intensity);
-  const nD = num(p.nearest && p.nearest.distance);
-
-  if(localV >= 0.031){
-    return `<span class="rain-chip"><span class="rn-ico">🌧️</span><b>附近正在下${intensityWord(localV)}</b>，出门带把伞吧</span>`;
-  }
-  if(nV >= 0.031 && nD > 0 && nD <= 15){
-    const dtxt = nD < 1 ? '不到 1' : Math.round(nD);
-    const tail = forecastDry48 ? '出门建议带把伞' : '雨可能靠近，出门带把伞吧';
-    return `<span class="rain-chip"><span class="rn-ico">🌧️</span><b>${dtxt} 公里外正在${intensityWord(nV)}</b>，${tail}</span>`;
-  }
-  return '';
+  return `<section class="card section">
+    <div class="st"><span>降水预报</span><small>未来 24 小时 · 逐小时</small></div>
+    <div class="rain-desc">未来 24 小时降水强度（mm/h）</div>
+    <div class="rain-bars">${bars}</div>
+    <div class="rain-scale">
+      <span>现在</span><span>6 时</span><span>12 时</span>
+      <span>18 时</span><span>${lastLabel}</span>
+    </div>
+    <div class="rain-hint">未来 2 小时无降水，显示未来 24 小时逐小时预报</div>
+  </section>`;
 }
 
 /* ================================================================
@@ -787,14 +891,14 @@ function draw(d){
     </div>`;
   }
 
-  /* 先判断逐时预报 48h 内是否全程无降水，供带伞提示与提示条联动措辞 */
-  const forecastDry48 = !buildRainEvents((h.precipitation) || []).length;
-  const umbrellaChip = buildUmbrellaChip(rt, forecastDry48);
-  const rainChips = buildRainChips(r, !!umbrellaChip);
+  const hasRain24h = hasRainInHours(h.precipitation, 24);
+  const noRainBadge = hasRain24h ? '' :
+    `<span class="no-rain-badge">未来短时间内<b>无降水</b></span>`;
 
   const html =
     hero +
     `<section class="grid">${metrics}</section>` +
+    renderRainSection(r) +
     `<section class="card section">
        <div class="hourly-head">
          <div class="htitle">逐时预报</div>
@@ -802,8 +906,7 @@ function draw(d){
        <div class="hourly-badges">
          <span class="hourly-date" id="hourlyDate">--</span>
          ${uvBadge}
-         ${umbrellaChip}
-         ${rainChips}
+         ${noRainBadge}
        </div>
        <div class="chart-wrap">
          <div class="y-axis" id="yaxis"></div>
@@ -825,10 +928,23 @@ function draw(d){
 function openSettings(){/* 演示版不需要 */}
 
 /* ================================================================
-   五、构造「附近有雨 · 即将开始下雨」的模拟数据
+   五、构造「30 分钟后开始下小雨」的模拟数据
    ================================================================ */
 
-/* ---- 5.1 生成 48 小时逐时数据 ---- */
+/* ---- 5.1 生成分钟级降水数据：120 个值，前 30 分钟为 0，
+        30~70 分钟为小雨（0.12~0.22），70 分钟之后逐渐回落 ---- */
+function buildMinutelyRain(){
+  const arr = [];
+  for(let i=0; i<120; i++){
+    if(i < 30)       arr.push(0);                    /* 前半小时无雨 */
+    else if(i < 70)  arr.push(0.12 + Math.random()*0.10);  /* 中段小雨 */
+    else if(i < 95)  arr.push(0.08 + Math.random()*0.06);  /* 后段渐弱 */
+    else             arr.push(0);
+  }
+  return arr;
+}
+
+/* ---- 5.2 生成 48 小时逐时数据 ---- */
 function buildHourly(){
   const tempArr = [];
   const humArr  = [];
@@ -870,7 +986,7 @@ function buildHourly(){
   return { tempArr, humArr, precArr };
 }
 
-/* ---- 5.2 组装完整模拟响应 ---- */
+/* ---- 5.3 组装完整模拟响应 ---- */
 function buildMockData(){
   const { tempArr, humArr, precArr } = buildHourly();
   const now = new Date();
@@ -886,20 +1002,21 @@ function buildMockData(){
         apparent_temperature: 26.2,
         humidity: 0.72,
         cloudrate: 0.68,
-        skycon: 'PARTLY_CLOUDY_DAY',
+        skycon: 'SAND',
         visibility: 12.5,
         wind: { speed: 12.3, direction: 135 },
         pressure: 100850,
-        precipitation: {
-          local:   { status:'ok', intensity: 0 },
-          nearest: { status:'ok', distance: 2, intensity: 0.1875 }  /* 2 公里外正在下小雨 */
-        },
+        precipitation: { local: { intensity: 0 } },
         air_quality: {
           pm25: 28, pm10: 45, o3: 62, no2: 18, co: 0.5,
-          aqi: { chn: 42, usa: 38 },
+          aqi: { chn: 328, usa: 38 },
           description: { chn: '优', usa: 'Good' }
         },
         life_index: { ultraviolet: { index: 3, desc: '中等' } }
+      },
+      minutely: {
+        description: '约 30 分钟后开始下小雨，持续约 40 分钟',
+        precipitation_2h: buildMinutelyRain()
       },
       hourly: {
         temperature:   tempArr,
@@ -914,7 +1031,7 @@ function buildMockData(){
           { date: datStr,      min: 20.2, max: 29.1, avg: 24.3 }
         ],
         skycon: [
-          { date: todayStr,    value: 'PARTLY_CLOUDY_DAY' },
+          { date: todayStr,    value: 'SAND' },
           { date: tomorrowStr, value: 'CLEAR_DAY' },
           { date: datStr,      value: 'CLEAR_DAY' }
         ],
