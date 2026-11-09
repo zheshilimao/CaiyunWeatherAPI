@@ -16,7 +16,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
-import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -55,9 +55,8 @@ public class MainActivity extends AppCompatActivity {
         // Edge-to-edge：天气页面背景延伸到状态栏，状态栏本身透明。
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
-        getWindow().setNavigationBarColor(android.graphics.Color.rgb(7,27,61));
-        // 防止系统状态栏隐藏/显示切换瞬间出现黑色背景。
-        getWindow().setBackgroundDrawable(new ColorDrawable(android.graphics.Color.rgb(7,27,61)));
+        // 开屏背板：固定晴空蓝 + 导航栏取深端色
+        applyBootBackground();
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             getWindow().setNavigationBarContrastEnforced(false);
         }
@@ -81,6 +80,20 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(() -> refreshLayout.setRefreshing(false));
     }
 
+    /** 开屏铺底：固定用晴空蓝背板（#5a9bd0→#22608e→#0a2c4e），启动画面稳定统一，
+        云层随后在背板之上渐渐浮现。不再用上次天气的截图/配色。 */
+    private void applyBootBackground() {
+        int[] colors = new int[]{
+                android.graphics.Color.rgb(90, 155, 208),
+                android.graphics.Color.rgb(34, 96, 142),
+                android.graphics.Color.rgb(10, 44, 78)
+        };
+        getWindow().setBackgroundDrawable(
+                new GradientDrawable(GradientDrawable.Orientation.TL_BR, colors));
+        getWindow().setNavigationBarColor(colors[2]);
+    }
+
+    /** 配置 WebView：JS 开关、缓存、桥接口与页面渲染回调。 */
     private void setupWebView() {
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -421,10 +434,6 @@ public class MainActivity extends AppCompatActivity {
                 "if(window.refreshWeather){window.refreshWeather();}",
                 null
         );
-    }
-
-    @Override protected void onPause() {
-        super.onPause();
     }
 
     @Override protected void onDestroy() {
