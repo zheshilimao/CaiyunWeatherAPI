@@ -1,0 +1,50 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.api.caiyunweather'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.api.caiyunweather'
+        minSdk 23
+        targetSdk 36
+        versionCode 233
+        versionName '2.3.3'
+    }
+
+    // 使用 JDK 17 语言特性编译
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        debug {
+            // Debug 与 Release 使用同一套签名
+            signingConfig signingConfigs.debug
+        }
+        release {
+            // Debug 与 Release 使用同一套签名，便于相互覆盖安装
+            signingConfig signingConfigs.debug
+            // R8：压缩 + 优化 + 资源收缩
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.2.0'
+
+    // AndroidX 依赖会带入 Kotlin 标准库；统一使用一个版本。
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+}
+
+// Kotlin 1.6.x 的 jdk7/jdk8 标准库与 1.8.x 的 stdlib 会产生 Duplicate class。
+// 当前项目是 Java 项目，不需要单独的 kotlin-stdlib-jdk7/jdk8。
+configurations.configureEach {
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+}

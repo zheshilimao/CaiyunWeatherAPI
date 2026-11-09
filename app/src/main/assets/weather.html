@@ -1,0 +1,2306 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>彩云天气API</title>
+
+<script>
+  const NATIVE_CONFIG = window.AndroidConfig || null;
+
+  let CAIYUN       = NATIVE_CONFIG ? NATIVE_CONFIG.getApiKey()     : '';
+  let API_BASE     = NATIVE_CONFIG ? NATIVE_CONFIG.getApiBase()    : 'https://api.caiyunapp.com/v2.6';
+  let LOCATION     = NATIVE_CONFIG ? NATIVE_CONFIG.getLocation()   : '';
+  let PLACE_NAME   = NATIVE_CONFIG ? NATIVE_CONFIG.getPlaceName()  : '未设置位置';
+
+  function syncNativeConfig(){
+    if(!NATIVE_CONFIG) return;
+    CAIYUN      = NATIVE_CONFIG.getApiKey()    || '';
+    API_BASE    = NATIVE_CONFIG.getApiBase()   || 'https://api.caiyunapp.com/v2.6';
+    LOCATION    = NATIVE_CONFIG.getLocation()  || '';
+    PLACE_NAME  = NATIVE_CONFIG.getPlaceName() || '未设置位置';
+  }
+
+  if (NATIVE_CONFIG && NATIVE_CONFIG.getStatusBarInsetDp) {
+    document.documentElement.style.setProperty('--status-inset', NATIVE_CONFIG.getStatusBarInsetDp() + 'px');
+  }
+</script>
+
+<script src="chart.umd.min.js"></script>
+
+<style>
+/* ================================================================
+   0. 天气主题变量（背景 + 面板色同步切换）
+   ================================================================ */
+:root{
+  --bg-a:#4387bd; --bg-b:#0b4e82; --bg-c:#071b3d;
+  --tint-1:67,135,189; --tint-2:32,95,150; --tint-3:11,78,130; --tint-4:7,27,61;
+  --panel-bg:rgba(23,79,130,.59);
+  --panel-border:rgba(255,255,255,.09);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.13);
+  --accent-bg:rgba(125,202,255,.15);
+}
+body[data-weather="clear"]{
+  --bg-a:#4a9fd6; --bg-b:#1c6fa8; --bg-c:#073761;
+  --tint-1:74,159,214; --tint-2:28,111,168; --tint-3:7,55,97; --tint-4:3,25,45;
+  --panel-bg:rgba(20,76,126,.56);
+  --panel-border:rgba(255,255,255,.12);
+  --panel-shadow:0 6px 18px rgba(0,20,50,.16);
+  --accent-bg:rgba(140,210,255,.18);
+}
+body[data-weather="clear-night"]{
+  --bg-a:#3f6699; --bg-b:#17335c; --bg-c:#040a18;
+  --tint-1:63,102,153; --tint-2:23,51,92; --tint-3:6,20,42; --tint-4:2,6,14;
+  --panel-bg:rgba(12,36,70,.70);
+  --panel-border:rgba(255,255,255,.08);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.28);
+  --accent-bg:rgba(120,180,255,.13);
+}
+body[data-weather="partly"]{
+  --bg-a:#6aa8cf; --bg-b:#31719d; --bg-c:#0d2c4a;
+  --tint-1:106,168,207; --tint-2:49,113,157; --tint-3:13,44,74; --tint-4:5,17,30;
+  --panel-bg:rgba(22,74,118,.58);
+  --panel-border:rgba(255,255,255,.10);
+  --panel-shadow:0 6px 18px rgba(0,20,45,.16);
+  --accent-bg:rgba(130,205,255,.16);
+}
+body[data-weather="cloudy"]{
+  --bg-a:#7e8e9d; --bg-b:#3c4f62; --bg-c:#111a24;
+  --tint-1:126,142,157; --tint-2:60,79,98; --tint-3:17,26,36; --tint-4:6,10,15;
+  --panel-bg:rgba(40,56,74,.62);
+  --panel-border:rgba(255,255,255,.08);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.20);
+  --accent-bg:rgba(190,215,240,.12);
+}
+body[data-weather="fog"]{
+  --bg-a:#8493a1; --bg-b:#47565f; --bg-c:#1b232a;
+  --tint-1:132,147,161; --tint-2:71,86,95; --tint-3:27,35,42; --tint-4:9,13,16;
+  --panel-bg:rgba(50,62,74,.60);
+  --panel-border:rgba(255,255,255,.10);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.18);
+  --accent-bg:rgba(210,225,240,.14);
+}
+body[data-weather="light-rain"]{
+  --bg-a:#6b93ac; --bg-b:#2d5c78; --bg-c:#0a1d30;
+  --tint-1:107,147,172; --tint-2:45,92,120; --tint-3:10,29,48; --tint-4:4,10,18;
+  --panel-bg:rgba(18,50,78,.62);
+  --panel-border:rgba(255,255,255,.09);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.22);
+  --accent-bg:rgba(130,200,255,.14);
+}
+body[data-weather="moderate-rain"]{
+  --bg-a:#557f99; --bg-b:#24485f; --bg-c:#06141f;
+  --tint-1:85,127,153; --tint-2:36,72,95; --tint-3:6,20,31; --tint-4:2,7,11;
+  --panel-bg:rgba(14,40,62,.66);
+  --panel-border:rgba(255,255,255,.08);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.26);
+  --accent-bg:rgba(120,190,245,.13);
+}
+body[data-weather="heavy-rain"]{
+  --bg-a:#41637d; --bg-b:#1a3549; --bg-c:#040b12;
+  --tint-1:65,99,125; --tint-2:26,53,73; --tint-3:4,11,18; --tint-4:1,4,7;
+  --panel-bg:rgba(10,30,48,.70);
+  --panel-border:rgba(255,255,255,.07);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.30);
+  --accent-bg:rgba(115,180,235,.12);
+}
+body[data-weather="storm"]{
+  --bg-a:#5b5488; --bg-b:#262347; --bg-c:#08061a;
+  --tint-1:91,84,136; --tint-2:38,35,71; --tint-3:8,6,26; --tint-4:3,2,10;
+  --panel-bg:rgba(22,18,44,.72);
+  --panel-border:rgba(255,255,255,.08);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.32);
+  --accent-bg:rgba(150,160,235,.14);
+}
+body[data-weather="snow"]{
+  --bg-a:#96b3c9; --bg-b:#54748e; --bg-c:#22303d;
+  --tint-1:150,179,201; --tint-2:84,116,142; --tint-3:34,48,61; --tint-4:12,18,24;
+  --panel-bg:rgba(48,66,84,.54);
+  --panel-border:rgba(255,255,255,.18);
+  --panel-shadow:0 6px 18px rgba(10,20,35,.14);
+  --accent-bg:rgba(200,225,245,.18);
+}
+body[data-weather="haze"]{
+  --bg-a:#a8977a; --bg-b:#5d5442; --bg-c:#241f18;
+  --tint-1:168,151,122; --tint-2:93,84,66; --tint-3:36,31,24; --tint-4:13,11,8;
+  --panel-bg:rgba(58,50,38,.62);
+  --panel-border:rgba(255,255,255,.10);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.20);
+  --accent-bg:rgba(235,215,175,.14);
+}
+body[data-weather="dust"]{
+  --bg-a:#b09a70; --bg-b:#66543a; --bg-c:#241d12;
+  --tint-1:176,154,112; --tint-2:102,84,58; --tint-3:36,29,18; --tint-4:13,10,6;
+  --panel-bg:rgba(60,50,34,.64);
+  --panel-border:rgba(255,255,255,.09);
+  --panel-shadow:0 6px 18px rgba(0,0,0,.22);
+  --accent-bg:rgba(235,210,165,.14);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;color:#fff;
+  font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;
+  background:radial-gradient(circle at 80% 5%, var(--bg-a) 0, var(--bg-b) 28%, var(--bg-c) 72%);
+  min-height:100vh;position:relative;
+}
+
+#weatherFx{
+  position:fixed;inset:0;width:100%;height:100%;
+  z-index:0;pointer-events:none;
+  opacity:0;transition:opacity .9s ease;
+}
+#weatherFx.on{opacity:1}
+
+.status-glass{
+  position:fixed;top:0;left:0;right:0;
+  height:calc(var(--status-inset,0px) + 8px);
+  z-index:200;pointer-events:none;
+  background:linear-gradient(180deg,
+    rgba(var(--tint-2),.55) 0%,
+    rgba(var(--tint-3),.40) 70%,
+    rgba(var(--tint-3),.20) 100%);
+  -webkit-mask-image:linear-gradient(180deg,#000 0%,#000 65%,transparent 100%);
+          mask-image:linear-gradient(180deg,#000 0%,#000 65%,transparent 100%);
+}
+
+.top{
+  position:relative;z-index:100;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:calc(8px + var(--status-inset,0px)) max(18px,calc((100vw - 1180px)/2 + 18px)) 12px;
+  transition:padding .3s ease;
+}
+.top::before{
+  content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(180deg,
+    rgba(var(--tint-1),.44) 0%,
+    rgba(var(--tint-2),.30) 42%,
+    rgba(var(--tint-3),.13) 70%,
+    rgba(var(--tint-4),0) 100%);
+  -webkit-mask-image:linear-gradient(180deg,#000 0%,#000 46%,rgba(0,0,0,.55) 78%,transparent 100%);
+          mask-image:linear-gradient(180deg,#000 0%,#000 46%,rgba(0,0,0,.55) 78%,transparent 100%);
+}
+.loc{
+  font-size:18px;margin-left:10px;font-weight:600;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:#e4eef8;letter-spacing:.1px;
+}
+.top-right{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.muted{color:#c2d5e6;font-size:11px;font-weight:400;opacity:.82;white-space:nowrap;letter-spacing:.1px}
+.settings-btn{
+  width:30px;height:30px;
+  border:1px solid #ffffff14;border-radius:10px;
+  background:#ffffff09;color:#c9d9e8;
+  display:grid;place-items:center;cursor:pointer;opacity:.78;font-size:16px;line-height:1;
+}
+.settings-btn:active{background:#ffffff18;transform:scale(.96)}
+
+.card{
+  background:var(--panel-bg);
+  border:1px solid var(--panel-border);
+  border-radius:20px;
+  box-shadow:var(--panel-shadow);
+  transition:background-color .6s ease, border-color .6s ease, box-shadow .6s ease;
+}
+.page{position:relative;z-index:1;max-width:1180px;margin:auto;padding:0 18px 8px}
+
+.hero{padding:30px 24px 26px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.hero-temp{font-size:112px;font-weight:400;line-height:1;letter-spacing:-6px}
+.hero-temp small{font-size:46px;letter-spacing:0;vertical-align:top;line-height:1.4;font-weight:400}
+.hero-sky{display:flex;align-items:center;gap:10px;font-size:24px;font-weight:650;margin-top:6px}
+.hero-icon{font-size:40px;line-height:1}
+.hero-range{margin-top:12px;font-size:16px;color:#c2d4e5;letter-spacing:.5px}
+.hero-icon svg{width:1em;height:1em}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.metric{padding:14px;display:flex;gap:12px;align-items:center;min-height:94px}
+.mi{
+  width:42px;height:42px;border-radius:50%;
+  display:grid;place-items:center;
+  background:var(--accent-bg);
+  font-size:20px;flex:0 0 42px;
+  transition:background-color .6s ease;
+}
+.ml{font-size:12px;color:#b8cee2}
+.mv{font-size:22px;font-weight:650;margin:2px 0}
+.ms{font-size:11px;color:#b8cee2}
+
+.metric-sun .ms-body{flex:1;min-width:0}
+.metric-sun .ms-times{
+  display:flex;align-items:center;gap:5px;
+  font-size:18px;font-weight:700;line-height:1.25;margin:2px 0;letter-spacing:-.3px;
+}
+.metric-sun .ms-times .rise{color:#ffc271}
+.metric-sun .ms-times .set{color:#ff9f5a}
+.metric-sun .ms-times .sep{color:#aac2d7;font-weight:400;font-size:15px}
+.metric-sun .ms-times .sun-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+.section{padding:14px 17px;margin-top:12px}
+.st{
+  font-size:18px;font-weight:700;margin-bottom:12px;
+  display:flex;justify-content:space-between;align-items:baseline;
+}
+.st small{font-size:13px;color:#aac2d7;font-weight:400}
+
+.hourly-head{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:8px;flex-wrap:wrap;gap:8px;
+}
+.hourly-head .htitle{font-size:18px;font-weight:700}
+
+.hourly-badges{
+  display:flex;gap:6px;align-items:center;margin-bottom:8px;
+  flex-wrap:nowrap;overflow-x:auto;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.hourly-badges::-webkit-scrollbar{display:none}
+
+.hourly-date{
+  display:inline-flex;align-items:center;flex:0 0 auto;white-space:nowrap;
+  background:rgba(16,185,129,.16);color:#3ddc97;
+  padding:5px 11px;border-radius:9px;
+  font-size:13px;font-weight:600;letter-spacing:.2px;
+}
+.uv-badge{
+  display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;white-space:nowrap;
+  background:rgba(255,180,80,.14);color:#ffc271;
+  padding:5px 11px;border-radius:9px;
+  font-size:13px;font-weight:600;letter-spacing:.2px;
+}
+.uv-badge svg{width:13px;height:13px;display:block;flex:0 0 auto}
+.uv-badge b{color:#ffb34f;font-weight:800;font-size:14px;margin-left:2px}
+
+.chart-wrap{display:flex;align-items:stretch;gap:0}
+.y-axis{position:relative;flex:0 0 34px;height:190px;pointer-events:none}
+.y-axis span{
+  position:absolute;right:4px;transform:translateY(-50%);
+  font-size:12px;white-space:nowrap;font-weight:600;letter-spacing:-.2px;
+}
+.y-axis span.lbl-temp{color:#ffc271}
+.y-axis span.lbl-hum{color:#c8e4ff}
+
+.chart-scroll{
+  flex:1;min-width:0;height:190px;
+  overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.chart-scroll::-webkit-scrollbar{display:none}
+.chartbox{height:190px;width:1440px;position:relative}
+
+.rain-chip{
+  display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;white-space:nowrap;
+  padding:5px 10px;border-radius:9px;
+  font-size:12.5px;font-weight:600;letter-spacing:.2px;
+  background:rgba(78,188,255,.13);color:#9ce8ff;
+}
+.rain-chip .rn-ico{font-size:13px;line-height:1}
+.rain-chip b{color:#4ebcff;font-weight:800}
+.rain-chip.dry{background:rgba(255,255,255,.07);color:#aac2d7}
+
+.days-v{display:flex;flex-direction:column}
+.day-row{
+  display:flex;align-items:center;gap:10px;
+  padding:16px 6px;border-bottom:1px solid #ffffff14;
+}
+.day-row:last-child{border-bottom:none}
+
+.day-label{flex:0 0 136px;display:flex;align-items:baseline;white-space:nowrap}
+.day-label b{font-size:16px;font-weight:600;color:#e7f0fa;letter-spacing:.2px}
+.day-label .dl-md{
+  font-size:12px;font-weight:400;color:#8fa9c0;
+  transform:translateY(2px);letter-spacing:.1px;margin-left:6px;
+}
+.day-label .dl-cond{font-size:18px;font-weight:600;color:#d6e3f0;letter-spacing:.3px;margin-left:14px}
+
+.day-icon{flex:0 0 36px;text-align:center;font-size:26px;line-height:1}
+.day-icon svg{width:1em;height:1em;display:inline-block;vertical-align:middle}
+
+.day-lo{flex:0 0 36px;font-size:16px;font-weight:600;text-align:right;color:#e7f0fa;letter-spacing:-.3px}
+.day-bar-wrap{flex:1;min-width:50px;padding:0 2px}
+.day-bar{height:8px;border-radius:4px;background:#ffffff1c;position:relative}
+.day-bar i{
+  position:absolute;top:0;bottom:0;border-radius:4px;
+  background:linear-gradient(90deg,#ffc271,#ff8a4f);
+}
+.day-marker{
+  position:absolute;top:50%;transform:translate(-50%,-50%);
+  width:12px;height:12px;border-radius:50%;
+  background:#ffb34f;box-shadow:0 0 0 2px #0b1e3a;z-index:2;
+}
+.day-hi{flex:0 0 36px;font-size:16px;font-weight:600;text-align:left;color:#e7f0fa;letter-spacing:-.3px}
+
+.foot{
+  padding:8px 0 12px; /* 上方留一点点，下方留一点点安全区 */
+  margin-top:0;       /* 彻底去掉上方外边距 */
+  color:rgba(255,255,255,.3); 
+  font-size:10.5px; 
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  background:none;
+  border:none;
+  box-shadow:none;
+  letter-spacing:.5px;
+}
+.foot svg{
+  margin:0 1px;
+  opacity:0.9;
+}
+.err{padding:30px;text-align:center;color:#ffd0d0}
+
+@media(max-width:850px){
+  .hero-temp{font-size:92px}
+  .grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:520px){
+  .page{padding:0 12px 4px}
+  .loc{font-size:17px;margin-left:8px}
+  .top{padding:calc(8px + var(--status-inset,0px)) 12px 11px}
+  .muted{font-size:11px;opacity:.82}
+  .hero{padding:24px 16px 20px}
+  .hero-temp{font-size:78px;letter-spacing:-4px}
+  .hero-temp small{font-size:34px}
+  .hero-icon{font-size:32px}
+  .hero-sky{font-size:20px}
+  .grid{gap:8px}
+  .metric{padding:11px;min-height:86px;gap:9px}
+  .metric-sun .ms-times{font-size:12px;gap:3px}
+  .metric-sun .ms-times .sep{font-size:10px}
+  .metric-sun .ms-times .sun-icon svg{width:14px;height:11px}
+  .mi{width:36px;height:36px;flex:0 0 36px;font-size:17px}
+  .mv{font-size:18px}
+  .rain-chip{font-size:12px;padding:4px 8px}
+  .rain-chip .rn-ico{font-size:12px}
+  .st{font-size:16px}
+  .hourly-head .htitle{font-size:16px}
+  .hourly-date,.uv-badge{font-size:12px;padding:4px 9px}
+  .uv-badge svg{width:11px;height:11px}
+  .uv-badge b{font-size:13px}
+  .y-axis{flex:0 0 30px}
+  .y-axis span{font-size:11px;right:3px}
+  .day-row{padding:14px 4px;gap:6px}
+  .day-label{flex:0 0 104px}
+  .day-label b{font-size:14px}
+  .day-label .dl-md{font-size:11px;margin-left:5px;transform:translateY(2px)}
+  .day-label .dl-cond{font-size:16px;margin-left:8px}
+  .day-icon{flex:0 0 24px;font-size:20px}
+  .day-lo,.day-hi{flex:0 0 30px;font-size:14px}
+  .day-bar-wrap{min-width:30px;padding:0 2px}
+}
+</style>
+</head>
+<body>
+<div class="status-glass"></div>
+
+<div class="top">
+  <div class="loc" id="loc">定位加载中…</div>
+  <div class="top-right">
+    <div class="muted" id="upd">正在更新…</div>
+    <button class="settings-btn" aria-label="设置" onclick="openWeatherSettings()">⚙</button>
+  </div>
+</div>
+
+<main class="page">
+  <div id="app">加载中…</div>
+</main>
+
+<script>
+/* ================================================================
+   图标常量
+   ================================================================ */
+const SUNRISE_ICON=`<svg viewBox="0 0 22 16" width="18" height="14" fill="none">
+  <line x1="1" y1="13" x2="21" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M 5.5 13 A 5.5 5.5 0 0 1 16.5 13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M 11 8.2 L 11 3.2 M 8.2 5.8 L 11 3.2 L 13.8 5.8"
+        stroke="currentColor" stroke-width="1.6" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+const SUNSET_ICON=`<svg viewBox="0 0 22 16" width="18" height="14" fill="none">
+  <line x1="1" y1="13" x2="21" y2="13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M 5.5 13 A 5.5 5.5 0 0 1 16.5 13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M 11 3.2 L 11 8.2 M 8.2 5.8 L 11 8.2 L 13.8 5.8"
+        stroke="currentColor" stroke-width="1.6" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+const UV_ICON = `<svg viewBox="0 0 24 24" fill="none"
+  stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+  <circle cx="12" cy="12" r="3.4"/>
+  <line x1="12" y1="2.5" x2="12" y2="5"/>
+  <line x1="12" y1="19" x2="12" y2="21.5"/>
+  <line x1="2.5" y1="12" x2="5" y2="12"/>
+  <line x1="19" y1="12" x2="21.5" y2="12"/>
+  <line x1="5.3" y1="5.3" x2="7.2" y2="7.2"/>
+  <line x1="16.8" y1="16.8" x2="18.7" y2="18.7"/>
+  <line x1="5.3" y1="18.7" x2="7.2" y2="16.8"/>
+  <line x1="16.8" y1="7.2" x2="18.7" y2="5.3"/>
+</svg>`;
+
+const FOG_ICON = `<svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#E3ECF5"/><path d="M4.5 20c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#BFC9D4" stroke-width="1.6" stroke-linecap="round"/>
+</svg>`;
+
+const LIGHT_HAZE_ICON = `<svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#AED8F5"/><path d="M4.5 20c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#D4A373" stroke-width="2" stroke-linecap="round"/>
+</svg>`;
+
+const MODERATE_HAZE_ICON = `<svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#A9C6DD"/><path d="M4.5 16.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#C68A4E" stroke-width="2" stroke-linecap="round"/><path d="M4.5 19c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#C68A4E" stroke-width="2" stroke-linecap="round"/><path d="M4.5 21.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#C68A4E" stroke-width="2" stroke-linecap="round"/>
+</svg>`;
+
+const HEAVY_HAZE_ICON = `<svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#CFC9A8"/><path d="M4.5 16.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#8B5A2B" stroke-width="3" stroke-linecap="round"/><path d="M4.5 19c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#8B5A2B" stroke-width="3" stroke-linecap="round"/><path d="M4.5 21.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" fill="none" stroke="#8B5A2B" stroke-width="3" stroke-linecap="round"/>
+</svg>`;
+
+const DUST_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <circle cx="6" cy="9" r="1.3" fill="#D4A373"/>
+  <circle cx="10" cy="11" r="1.6" fill="#C2A878"/>
+  <circle cx="14" cy="8" r="1.1" fill="#D4A373"/>
+  <path d="M4.5 16c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0 3.6-1.1 5.5 0" stroke="#C2A878" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M7 19.5c1.8-1.1 3.6-1.1 5.5 0s3.7-1.1 5.5 0" stroke="#C2A878" stroke-width="1.2" stroke-linecap="round"/>
+</svg>`;
+
+const SAND_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <path d="M3 18Q7.5 15 12 18T21 18" fill="none" stroke="#C2A878" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M5 21Q9.5 18 14 21T21 21" fill="none" stroke="#C2A878" stroke-width="1.4" stroke-linecap="round"/>
+  <circle cx="6" cy="8" r="1.2" fill="#D4A373"/>
+  <circle cx="10" cy="5" r="0.9" fill="#D4A373"/>
+  <circle cx="14" cy="8" r="1.4" fill="#D4A373"/>
+  <circle cx="18" cy="5" r="1.1" fill="#D4A373"/>
+  <path d="M5 12c2-1.2 4-1.2 6 0s4-1.2 6 0" fill="none" stroke="#C2A878" stroke-width="1.3" stroke-linecap="round"/>
+</svg>`;
+
+const THUNDER_SHOWER_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#E3ECF5"/>
+  <path d="M13.5 8.5L9.8 14.5H12.2L10.8 19.5L15.5 12.5H13L14.5 8.5Z" fill="#FFD54F"/>
+  <path d="M5 19.5L3.5 22.5M8.5 20L7 23M15.5 19.5L14 22.5" stroke="#5B9BD5" stroke-width="1.3" stroke-linecap="round"/>
+</svg>`;
+
+const HAIL_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#E3ECF5"/>
+  <path d="M14 8.5L10 14.5H12.5L11 19.5L16 12.5H13.5L15 8.5Z" fill="#FFD54F"/>
+  <circle cx="5.5" cy="19" r="1.2" fill="#E9F0F8" stroke="#A0B8D0" stroke-width="0.5"/>
+  <circle cx="9.5" cy="21" r="1.4" fill="#E9F0F8" stroke="#A0B8D0" stroke-width="0.5"/>
+  <circle cx="16" cy="18.5" r="1.1" fill="#E9F0F8" stroke="#A0B8D0" stroke-width="0.5"/>
+  <circle cx="19" cy="21" r="1.3" fill="#E9F0F8" stroke="#A0B8D0" stroke-width="0.5"/>
+</svg>`;
+
+const SLEET_ICON = `<svg viewBox="0 0 24 24" width="24" height="24">
+  <path d="M7 18.5a4 4 0 0 1-.4-7.98 5.2 5.2 0 0 1 9.98-1.02A4.3 4.3 0 0 1 17.2 18.5Z" fill="#E3ECF5"/>
+  <path d="M4.5 19.5L3 22.5M8 20L6.5 23M11.5 19.5L10 22.5" stroke="#5B9BD5" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M14.8 19v2M13.8 20h2M14.1 19.3l1.4 1.4M14.1 20.7l1.4-1.4M17.2 19v2M16.2 20h2M16.5 19.3l1.4 1.4M16.5 20.7l1.4-1.4M19.6 19v2M18.6 20h2M18.9 19.3l1.4 1.4M18.9 20.7l1.4-1.4" stroke="#A6C8EA" stroke-width="1" stroke-linecap="round"/>
+</svg>`;
+
+const SM = {
+  CLEAR_DAY:           ['☀️', '晴'],
+  CLEAR_NIGHT:         ['🌙', '晴'],
+  PARTLY_CLOUDY_DAY:   ['🌤️', '多云'],
+  PARTLY_CLOUDY_NIGHT: ['🌙', '多云'],
+  CLOUDY:              ['☁️', '阴'],
+  LIGHT_RAIN:          ['🌦️', '小雨'],
+  MODERATE_RAIN:       ['🌧️', '中雨'],
+  HEAVY_RAIN:          ['🌧️', '大雨'],
+  STORM_RAIN:          ['⛈️', '暴雨'],
+  LIGHT_SNOW:          ['🌨️', '小雪'],
+  MODERATE_SNOW:       ['❄️', '中雪'],
+  HEAVY_SNOW:          ['❄️', '大雪'],
+  STORM_SNOW:          ['🌨️', '暴雪'],
+  FOG:                 [FOG_ICON,            '雾'],
+  LIGHT_HAZE:          [LIGHT_HAZE_ICON,     '轻度霾'],
+  MODERATE_HAZE:       [MODERATE_HAZE_ICON,  '中度霾'],
+  HEAVY_HAZE:          [HEAVY_HAZE_ICON,     '重度霾'],
+  DUST:                [DUST_ICON,            '浮尘'],
+  SAND:                [SAND_ICON,            '沙尘'],
+  THUNDER_SHOWER:      [THUNDER_SHOWER_ICON,  '雷阵雨'],
+  HAIL:                [HAIL_ICON,            '冰雹'],
+  SLEET:               [SLEET_ICON,           '雨夹雪'],
+  WIND:                ['💨', '大风'],
+};
+
+const WEATHER_THEME = {
+  CLEAR_DAY:'clear', CLEAR_NIGHT:'clear-night',
+  PARTLY_CLOUDY_DAY:'partly', PARTLY_CLOUDY_NIGHT:'partly',
+  CLOUDY:'cloudy', FOG:'fog',
+  LIGHT_RAIN:'light-rain', MODERATE_RAIN:'moderate-rain', HEAVY_RAIN:'heavy-rain',
+  STORM_RAIN:'storm', THUNDER_SHOWER:'storm', HAIL:'storm',
+  LIGHT_SNOW:'snow', MODERATE_SNOW:'snow', HEAVY_SNOW:'snow', STORM_SNOW:'snow', SLEET:'snow',
+  LIGHT_HAZE:'haze', MODERATE_HAZE:'haze', HEAVY_HAZE:'haze',
+  DUST:'dust', SAND:'dust', WIND:'cloudy',
+};
+
+/* ================================================================
+   WeatherFX：天气 + 时段双重驱动
+   ================================================================ */
+const WeatherFX = (function(){
+  'use strict';
+
+  const motionQuery  = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const reduceMotion = !!(motionQuery && motionQuery.matches);
+
+  let cv = null, ctx = null;
+  let W = 0, H = 0, dpr = 1;
+  let mode  = '';
+  let phase = 'noon';
+  let particles = [];
+  let clouds = [];
+  let sun = null;
+  let raf = null, lastT = 0, running = false, clock = 0;
+  let flash = 0, nextFlash = 4, bolt = null;
+  let rzTimer = null, phaseTimer = null;
+
+  const FX_KEY = 'wx_fx_prefs_v2';
+  const FX_DEFAULTS = { showClouds:true, cloudDensity:1, cloudSpeed:1, cloudOpacity:1, showGlow:true, glowIntensity:1, showParticles:true, particleDensity:1, showRain:true, rainDensity:1, rainSpeed:1, showSnow:true, snowDensity:1, snowSpeed:1, fxOpacity:1, panelAlpha:1 };
+  let fxPrefs = Object.assign({}, FX_DEFAULTS);
+  try { const s = localStorage.getItem(FX_KEY); if(s) Object.assign(fxPrefs, FX_DEFAULTS, JSON.parse(s)); } catch(e){}
+  function clamp(v,a,b){ v=Number(v); return isFinite(v)?Math.max(a,Math.min(b,v)):a; }
+  function normPrefs(p){
+    return {
+      showClouds: p.showClouds!==false, cloudDensity: clamp(p.cloudDensity,0.3,4), cloudSpeed: clamp(p.cloudSpeed,0.3,4), cloudOpacity: clamp(p.cloudOpacity,0.3,2.5),
+      showGlow: p.showGlow!==false, glowIntensity: clamp(p.glowIntensity,0,4),
+      showParticles: p.showParticles!==false, particleDensity: clamp(p.particleDensity,0.3,4),
+      showRain: p.showRain!==false, rainDensity: clamp(p.rainDensity,0.3,4), rainSpeed: clamp(p.rainSpeed,0.4,4),
+      showSnow: p.showSnow!==false, snowDensity: clamp(p.snowDensity,0.3,4), snowSpeed: clamp(p.snowSpeed,0.4,4),
+      fxOpacity: clamp(p.fxOpacity,0,1),
+      panelAlpha: clamp(p.panelAlpha == null ? 1 : p.panelAlpha, 0.4, 1.6)
+    };
+  }
+  fxPrefs = normPrefs(fxPrefs);
+
+
+
+  const rnd   = (a,b) => a + Math.random()*(b-a);
+  const scale = () => Math.max(0.4, Math.min(1, W/980));
+
+  function getTimePhase(){
+    const h = new Date().getHours();
+    if(h >= 4  && h < 6)  return 'dawn';
+    if(h >= 6  && h < 10) return 'morning';
+    if(h >= 10 && h < 15) return 'noon';
+    if(h >= 15 && h < 17) return 'afternoon';
+    if(h >= 17 && h < 19) return 'dusk';
+    return 'night';
+  }
+
+  const TIME_PAL = {
+    dawn: {
+      glow:[255,200,160], glowA:0.42,
+      cloudTop:[255,205,175], cloudBot:[105,100,145],
+      rain:[205,215,245], snow:[255,255,255], fog:[225,225,240],
+      mote:[255,220,180], dust:[200,180,150]
+    },
+    morning: {
+      glow:[255,240,200], glowA:0.34,
+      cloudTop:[255,252,245], cloudBot:[150,165,195],
+      rain:[210,228,255], snow:[255,255,255], fog:[228,235,245],
+      mote:[255,240,205], dust:[205,185,150]
+    },
+    noon: {
+      glow:[255,255,230], glowA:0.28,
+      cloudTop:[255,255,255], cloudBot:[168,193,220],
+      rain:[215,235,255], snow:[255,255,255], fog:[232,240,250],
+      mote:[255,248,220], dust:[210,190,155]
+    },
+    afternoon: {
+      glow:[255,225,170], glowA:0.33,
+      cloudTop:[255,245,225], cloudBot:[165,150,168],
+      rain:[220,225,245], snow:[255,255,255], fog:[235,230,225],
+      mote:[255,228,180], dust:[212,185,148]
+    },
+    dusk: {
+      glow:[255,160,110], glowA:0.45,
+      cloudTop:[255,185,150], cloudBot:[90,65,110],
+      rain:[200,190,225], snow:[255,240,245], fog:[215,195,200],
+      mote:[255,190,150], dust:[200,165,130]
+    },
+    night: {
+      glow:[180,200,255], glowA:0.22,
+      cloudTop:[130,150,195], cloudBot:[35,45,80],
+      rain:[160,185,225], snow:[230,240,255], fog:[170,180,210],
+      mote:[200,215,255], dust:[170,160,150]
+    }
+  };
+
+  const WARM_PHASE = { dawn:1.0, dusk:1.0, morning:0.45, afternoon:0.65, noon:0.18, night:0 };
+
+  // 云量按天气类型明显区分：晴 < 多云 < 阴 < 小雨 < 中雨 < 大雨 < 雷暴
+  const CLOUD_CFG = {
+    'clear':         { count:[2,4],   styles:['cirrus','cumulus'], alpha:0.50, darken:0.00, speed:0.7, light:1.00 },
+    'clear-night':   { count:[1,2],   styles:['cirrus'],            alpha:0.34, darken:0.15, speed:0.4, light:0.85 },
+    'partly':        { count:[8,12],  styles:['cumulus','stratus','cumulus-tall'], alpha:0.66, darken:0.12, speed:1.0, light:0.75 },
+    'cloudy':        { count:[18,24], styles:['stratus','nimbus','cumulus-tall','cirrus'],  alpha:0.82, darken:0.56, speed:1.15, light:0.28 },
+    'fog':           { count:[3,5],   styles:['stratus'],            alpha:0.30, darken:0.18, speed:0.3, light:0.42 },
+    'haze':          { count:[2,4],   styles:['stratus'],            alpha:0.26, darken:0.28, speed:0.25, light:0.32 },
+    'dust':          { count:[1,3],   styles:['cirrus'],             alpha:0.20, darken:0.42, speed:0.3, light:0.28 },
+    'light-rain':    { count:[14,18], styles:['stratus','nimbus'],   alpha:0.74, darken:0.48, speed:1.0, light:0.42 },
+    'moderate-rain': { count:[20,26], styles:['nimbus','stratus'],   alpha:0.84, darken:0.58, speed:1.1, light:0.32 },
+    'heavy-rain':    { count:[26,32], styles:['nimbus'],             alpha:0.90, darken:0.68, speed:1.3, light:0.22 },
+    'storm':         { count:[30,38], styles:['nimbus'],             alpha:0.94, darken:0.78, speed:1.4, light:0.16 },
+    'snow':          { count:[15,20], styles:['stratus','nimbus'],   alpha:0.74, darken:0.32, speed:0.8, light:0.55 }
+  };
+
+  const mixColor = (a,b,t) => [
+    a[0] + (b[0]-a[0])*t,
+    a[1] + (b[1]-a[1])*t,
+    a[2] + (b[2]-a[2])*t
+  ];
+  const rgba = (c,a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+
+  function init(){
+    if(reduceMotion || cv) return;
+    cv = document.createElement('canvas');
+    cv.id = 'weatherFx';
+    cv.setAttribute('aria-hidden','true');
+    document.body.insertBefore(cv, document.body.firstChild);
+    ctx = cv.getContext('2d');
+    if(!ctx){ cv.remove(); cv = null; return; }
+
+    phase = getTimePhase();
+    resize();
+
+    window.addEventListener('resize', ()=>{
+      clearTimeout(rzTimer);
+      rzTimer = setTimeout(resize, 180);
+    });
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.hidden) stop();
+      else if(mode) start();
+    });
+
+    phaseTimer = setInterval(()=>{
+      if(!mode) return;
+      const p = getTimePhase();
+      if(p !== phase){
+        phase = p;
+        build(mode);
+      }
+    }, 60000);
+  }
+
+  function resize(){
+    if(!cv) return;
+    W = window.innerWidth;
+    H = window.innerHeight;
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);   // 降低像素填充率，省电
+    cv.width  = Math.max(1, Math.round(W*dpr));
+    cv.height = Math.max(1, Math.round(H*dpr));
+    cv.style.width  = W + 'px';
+    cv.style.height = H + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    if(mode) build(mode);
+  }
+
+  // 云团轮廓噪声：16 点半径系数，每 4 点一个“缺口”，避免光滑圆边
+  const blobNoise = () => {
+    const p = [];
+    for(let i=0;i<16;i++) p.push(i%4===3 ? 0.74+Math.random()*0.22 : 0.9+Math.random()*0.24);
+    return p;
+  };
+
+  function makeCloudShape(style, R){
+    const blobs = [];
+    const rr = (a,b) => a + Math.random()*(b-a);
+    const pick = () => blobs[(Math.random()*blobs.length)|0];
+    const add = (dx,dy,rx,ry,fr) => blobs.push({dx,dy,rx,ry,p:blobNoise(),fringe:fr?1:0});
+    const addFringe = (n,pickFn,angA,angB,rs,re) => {
+      for(let i=0;i<n;i++){
+        const b = pickFn();
+        const ang = rr(angA,angB), rad = Math.min(b.rx,b.ry)*rr(rs,re);
+        blobs.push({dx:b.dx+Math.cos(ang)*b.rx*rr(0.45,1.0), dy:b.dy+Math.sin(ang)*b.ry*rr(0.35,0.95),
+                    rx:rad*rr(0.85,1.35), ry:rad*rr(0.55,1.05), p:blobNoise(), fringe:1});
+      }
+    };
+
+    if(style === 'cumulus'){
+      // 平底积云：大小不一的主团 + 主团间隙的次级凸起 + 平底盘
+      const base = R*0.16;
+      const n = 3 + (Math.random()*2|0);
+      const w = R*rr(1.9,2.45);
+      const lobes = [];
+      let x = -w/2;
+      for(let i=0;i<n;i++){
+        const lw = (w/n) * rr(0.8,1.25);
+        lobes.push({x:x+lw/2, w:lw, r:lw*rr(0.42,0.6)});
+        x += lw;
+      }
+      for(const L of lobes) add(L.x, base - L.r*rr(0.5,0.82), L.r*rr(1.05,1.3), L.r*rr(0.8,1.02));
+      for(let i=0;i<lobes.length-1;i++){
+        const a = lobes[i], b2 = lobes[i+1];
+        add((a.x+b2.x)/2 + rr(-0.08,0.08)*w, base - Math.min(a.r,b2.r)*rr(0.4,0.72),
+            Math.min(a.r,b2.r)*rr(0.5,0.75), Math.min(a.r,b2.r)*rr(0.45,0.62));
+      }
+      add(rr(-0.18,0.18)*w, base, w*rr(0.42,0.56), R*rr(0.09,0.15));
+      addFringe(8, pick, -Math.PI*0.95, -Math.PI*0.05, 0.16, 0.46);
+      addFringe(3, pick,  Math.PI*0.2,  Math.PI*0.8, 0.12, 0.3);
+    } else if(style === 'cumulus-tall'){
+      // 塔状积云：底盘 + 中央向上堆叠的上团
+      const base = R*0.18, w = R*rr(1.45,1.85), n = 3 + (Math.random()*2|0);
+      const lobes = [];
+      let x = -w/2;
+      for(let i=0;i<n;i++){ const lw=(w/n)*rr(0.85,1.2); lobes.push({x:x+lw/2, w:lw, r:lw*rr(0.4,0.58)}); x+=lw; }
+      for(const L of lobes) add(L.x, base - L.r*rr(0.5,0.8), L.r*rr(1.0,1.25), L.r*rr(0.8,1.0));
+      const tn = 2 + (Math.random()*2|0);
+      for(let i=0;i<tn;i++){
+        const L = pick();
+        // 注意：pick() 返回的是 {dx,dy,rx,ry} 云团，不是 {x,r}；
+        // 旧代码用了不存在的 L.x / L.r，会生成 NaN 云团，导致整朵云不可见且永不回收。
+        add(L.dx + rr(-0.3,0.3)*L.rx, L.dy - L.ry*rr(0.9,1.5), L.rx*rr(0.5,0.8), L.ry*rr(0.5,0.75));
+      }
+      add(0, base, w*rr(0.4,0.5), R*rr(0.09,0.14));
+      addFringe(9, pick, -Math.PI*0.95, Math.PI*0.05, 0.15, 0.44);
+      addFringe(3, pick,  Math.PI*0.2,  Math.PI*0.8, 0.12, 0.3);
+    } else if(style === 'stratus'){
+      // 层云：整片长板 + 顶部起伏小团，底部几乎水平
+      const base = R*0.1, w = R*rr(2.4,3.0), h = R*rr(0.5,0.72);
+      add(0, base - h*0.5, w*0.5, h*0.5);
+      const n = 3 + (Math.random()*3|0);
+      for(let i=0;i<n;i++){
+        const t = (i+0.5)/n - 0.5;
+        add(t*w + rr(-0.06,0.06)*w, base - h*rr(0.55,0.95), w*rr(0.12,0.2), h*rr(0.28,0.45));
+      }
+      add(rr(-0.15,0.15)*w, base, w*rr(0.35,0.45), h*rr(0.22,0.34));
+      addFringe(6, pick, -Math.PI, Math.PI, 0.14, 0.36);
+    } else if(style === 'nimbus'){
+      // 雨云：宽厚暗盘 + 底部下垂碎絮
+      const base = R*0.12, w = R*rr(2.2,2.8), h = R*rr(0.6,0.85);
+      add(0, base - h*0.45, w*0.48, h*0.48);
+      const n = 4 + (Math.random()*3|0);
+      for(let i=0;i<n;i++){
+        const t = (i+0.5)/n - 0.5;
+        add(t*w + rr(-0.05,0.05)*w, base - h*rr(0.5,0.85), w*rr(0.13,0.22), h*rr(0.3,0.48));
+      }
+      add(rr(-0.12,0.12)*w, base, w*rr(0.36,0.46), h*rr(0.24,0.36));
+      addFringe(8, pick, Math.PI*0.1, Math.PI*0.9, 0.16, 0.42);
+      addFringe(4, pick, -Math.PI*0.9, -Math.PI*0.1, 0.14, 0.34);
+    } else { // cirrus：细长拉丝
+      const n = 11 + (Math.random()*7|0);
+      const w = R*3.3, h = R*0.26;
+      for(let i=0;i<n;i++){
+        const t = i/(n-1) - 0.5;
+        const r = h*rr(0.4,1.0);
+        add(t*w + rr(-0.04,0.04)*w, Math.sin(t*Math.PI*2.6)*h*0.5 + rr(-0.35,0.35)*h, r*rr(1.5,3.2), r*rr(0.28,0.62));
+      }
+      for(let i=0;i<5;i++){
+        const b = pick(); const r = Math.min(b.rx,b.ry)*rr(0.3,0.65);
+        add(b.dx+rr(-0.7,0.7)*b.rx, b.dy+rr(-0.6,0.6)*b.ry, r*rr(2.0,3.6), r*rr(0.22,0.45), true);
+      }
+    }
+    return blobs;
+  }
+
+  function cloudBounds(blobs){
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+    for(const b of blobs){
+      // 防御：忽略异常云团，避免一个 NaN 污染整朵云的包围盒（会导致云永不回收）
+      if(!isFinite(b.dx) || !isFinite(b.dy) || !isFinite(b.rx) || !isFinite(b.ry)) continue;
+      minX = Math.min(minX, b.dx - b.rx);
+      maxX = Math.max(maxX, b.dx + b.rx);
+      minY = Math.min(minY, b.dy - b.ry);
+      maxY = Math.max(maxY, b.dy + b.ry);
+    }
+    return {minX, maxX, minY, maxY};
+  }
+
+  function buildClouds(cfg, pal){
+    clouds = [];
+    const [cMin, cMax] = cfg.count;
+    // 云量只由“天气类型 + 密度滑杆”决定；云朵尺寸才随屏幕缩放。
+    // 旧公式额外乘 scale()（手机上被压到 0.55），是默认云量偏少的原因之一。
+    const density = fxPrefs.showClouds ? Math.pow(fxPrefs.cloudDensity, 1.3) : 0;
+    const n = Math.min(72, Math.round((cMin + Math.random()*(cMax - cMin + 1)) * density));
+    // 生成范围只在屏幕左右留少量缓冲，避免大量云停在屏幕外“慢慢飘进来”
+    const spawnPad = Math.max(150, W * 0.12);
+    const dark = [42, 46, 58];
+    const top = mixColor(pal.cloudTop, dark, cfg.darken * 0.75);
+    const bot = mixColor(pal.cloudBot, dark, cfg.darken);
+
+    for(let i=0;i<n;i++){
+      const layer = Math.random() < 0.26 ? 0 : (Math.random() < 0.58 ? 1 : 2);
+      const style = (layer === 0 && Math.random() < 0.55) ? 'cirrus' : cfg.styles[Math.floor(Math.random() * cfg.styles.length)];
+      const layerScale = layer === 0 ? 0.60 : (layer === 1 ? 0.95 : 1.30);
+      const R = Math.max(80, Math.min(W, H) * 0.18) * layerScale * (0.8 + Math.random()*0.5);
+      const blobs = makeCloudShape(style, R);
+      if(layer === 0){
+        const wn = 2 + Math.floor(Math.random()*3);
+        for(let k=0;k<wn;k++){
+          const b = blobs[Math.floor(Math.random()*blobs.length)];
+          const len = b.rx * (1.2 + Math.random()*1.8);
+          blobs.push({ dx: b.dx + (Math.random()<0.5?-1:1)*len*0.5, dy: b.dy - b.ry*(0.1 + Math.random()*0.5), rx: len*0.5, ry: Math.max(3, b.ry*0.12), p: blobNoise(), fringe:1 });
+        }
+      }
+      const bounds = cloudBounds(blobs);
+
+      clouds.push({
+        // 均匀铺满屏幕（含少量抖动），密度调高时屏幕内立即多出云
+        x: -spawnPad + ((i + 0.5) / Math.max(n, 1)) * (W + spawnPad * 2)
+           + (Math.random() - 0.5) * (W / Math.max(n, 6)),
+        y: (0.02 + Math.random() * 0.66) * H,
+        vx: cfg.speed * fxPrefs.cloudSpeed * (layer === 0 ? 3 : (layer === 1 ? 7 : 12)) * (0.7 + Math.random()*0.6),
+        alpha: Math.min(1, cfg.alpha * fxPrefs.cloudOpacity) * (layer === 0 ? 0.40 : (layer === 1 ? 0.75 : 1.0)) * (0.85 + Math.random()*0.3),
+        blobs, bounds, layer, style,
+        colorTop: top, colorBot: bot
+      });
+    }
+    clouds.sort((a,b) => a.layer - b.layer);
+  }
+
+  function calcSun(){
+    const now = new Date();
+    const h = now.getHours() + now.getMinutes()/60;
+    const pal = TIME_PAL[phase];
+    const cfg = CLOUD_CFG[mode] || CLOUD_CFG.cloudy;
+
+    let t, isMoon = false;
+    if(h >= 5.5 && h <= 18.5){
+      t = (h - 5.5) / 13;
+    } else {
+      isMoon = true;
+      const nh = h < 12 ? h + 24 : h;
+      t = (nh - 18.5) / 11;
+    }
+    t = Math.max(0, Math.min(1, t));
+
+    const x = W * (0.08 + t * 0.84);
+    const arcY = Math.sin(t * Math.PI);
+    const y = H * (0.85 - arcY * 0.72);
+
+    sun = {
+      x, y, isMoon, t,
+      color: pal.glow,
+      radius: Math.max(W, H) * (isMoon ? 0.38 : 0.60),
+      intensity: (fxPrefs.showGlow ? pal.glowA * cfg.light * fxPrefs.glowIntensity : 0) * (isMoon ? 0.9 : 1)
+    };
+  }
+
+  function rainSet(k, base){
+    if(!fxPrefs.showParticles || !fxPrefs.showRain) return;
+    const n = Math.round(base * scale() * fxPrefs.particleDensity * fxPrefs.rainDensity);
+    const sp = fxPrefs.rainSpeed;
+    for(let i=0;i<n;i++){
+      const d = rnd(0.45, 1);
+      particles.push({
+        type:'rain',
+        x: rnd(-60, W+60),
+        y: rnd(-H, H),
+        vy: rnd(560, 880) * k * d * sp,
+        vx: rnd(28, 72) * k * sp,
+        len: rnd(11, 26) * k * d,
+        lv: d > 0.78 ? 2 : (d > 0.6 ? 1 : 0)
+      });
+    }
+  }
+
+  function snowSet(){
+    if(!fxPrefs.showParticles || !fxPrefs.showSnow) return;
+    const n = Math.round(60 * scale() * fxPrefs.particleDensity * fxPrefs.snowDensity);
+    const sp = fxPrefs.snowSpeed;
+    for(let i=0;i<n;i++){
+      particles.push({
+        type:'snow',
+        x: rnd(0,W), y: rnd(0,H),
+        r: rnd(0.9, 2.6),
+        vy: rnd(28, 78) * sp,
+        vx: rnd(-14, 14) * sp,
+        sway: rnd(0.6, 1.8),
+        phase: rnd(0, Math.PI*2),
+        a: rnd(0.35, 0.85)
+      });
+    }
+  }
+
+  function fogSet(m){
+    if(!fxPrefs.showParticles) return;
+    const pal = TIME_PAL[phase];
+    const c = (m === 'haze' ? [206,188,148] : pal.fog).join(',');
+    for(let i=0;i<7;i++){
+      particles.push({
+        type:'fog',
+        x: rnd(-0.1, 1) * W,
+        y: rnd(0.05, 0.95) * H,
+        r: rnd(200, Math.max(280, W*0.45)),
+        vx: rnd(5, 16) * (Math.random() < 0.5 ? -1 : 1),
+        a: rnd(0.028, 0.07),
+        rgb: c
+      });
+    }
+  }
+
+  function dustSet(){
+    if(!fxPrefs.showParticles) return;
+    const n = Math.round(90 * scale() * fxPrefs.particleDensity);
+    for(let i=0;i<n;i++){
+      particles.push({
+        type:'dust',
+        x: rnd(0,W), y: rnd(0,H),
+        r: rnd(0.7, 2.1),
+        vx: rnd(8, 38),
+        vy: rnd(-6, 12),
+        a: rnd(0.10, 0.30)
+      });
+    }
+  }
+
+  function sunSet(){
+    if(!fxPrefs.showParticles) return;
+    const n = Math.round(20 * scale() * fxPrefs.particleDensity);
+    for(let i=0;i<n;i++){
+      particles.push({
+        type:'mote',
+        x: rnd(0,W), y: rnd(0,H),
+        r: rnd(0.8, 2.2),
+        vx: rnd(-9, 9),
+        vy: rnd(-12, 3),
+        phase: rnd(0, Math.PI*2)
+      });
+    }
+  }
+
+  // mult: 星空密度系数（晴 1.0 / 多云 0.62 / 阴 0.30）
+  function starSet(mult){
+    if(!fxPrefs.showParticles) return;
+    const n = Math.round(75 * scale() * fxPrefs.particleDensity * (mult == null ? 1 : mult));
+    for(let i=0;i<n;i++){
+      particles.push({
+        type:'star',
+        x: rnd(0,W),
+        y: rnd(0, H*0.85),
+        r: rnd(0.6, 1.7),
+        phase: rnd(0, Math.PI*2),
+        speed: rnd(0.5, 1.6)
+      });
+    }
+  }
+
+  function build(m){
+    const cfg = CLOUD_CFG[m] || CLOUD_CFG.cloudy;
+    const pal = TIME_PAL[phase];
+
+    particles = [];
+    flash = 0;
+    bolt = null;
+    clock = 0;
+
+    calcSun();
+    buildClouds(cfg, pal);
+
+    if(m === 'light-rain')         rainSet(0.55, 45);
+    else if(m === 'moderate-rain') rainSet(0.9, 85);
+    else if(m === 'heavy-rain')    rainSet(1.35, 140);
+    else if(m === 'storm'){ rainSet(1.3, 135); nextFlash = rnd(1.2, 3.5); }
+    else if(m === 'snow')          snowSet();
+    else if(m === 'fog' || m === 'haze') fogSet(m);
+    else if(m === 'dust')          dustSet();
+    else if(m === 'clear')         sunSet();
+    else if(m === 'clear-night')   starSet(1);
+
+    // 夜间多云/阴天也保留部分星空：阴（0.30）< 多云（0.62）< 晴（1.0）
+    if(m !== 'clear-night' && phase === 'night'){
+      if(m === 'partly')                 starSet(0.62);
+      else if(m === 'cloudy')            starSet(0.30);
+      else if(m === 'fog' || m === 'haze') starSet(0.08);
+    }
+  }
+
+  function stepParticles(dt){
+    for(const p of particles){
+      if(p.type === 'rain'){
+        p.y += p.vy * dt;
+        p.x += p.vx * dt;
+        if(p.y - p.len > H){ p.y = -p.len - rnd(0, H*0.35); p.x = rnd(-60, W+60); }
+        if(p.x > W + 100) p.x -= W + 200;
+      } else if(p.type === 'snow'){
+        p.phase += p.sway * dt;
+        p.y += p.vy * dt;
+        p.x += (Math.sin(p.phase) * 22 + p.vx) * dt;
+        if(p.y > H + 8){ p.y = -8; p.x = rnd(0,W); }
+        if(p.x > W + 8) p.x = -8;
+        else if(p.x < -8) p.x = W + 8;
+      } else if(p.type === 'fog'){
+        p.x += p.vx * dt;
+        const m = p.r * 0.6;
+        if(p.x - m > W) p.x = -m;
+        else if(p.x + m < 0) p.x = W + m;
+      } else if(p.type === 'dust'){
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if(p.x > W + 6){ p.x = -6; p.y = rnd(0,H); }
+        if(p.y < -6) p.y = H + 6;
+        else if(p.y > H + 6) p.y = -6;
+      } else if(p.type === 'mote'){
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if(p.y < -8){ p.y = H + 8; p.x = rnd(0,W); }
+        if(p.x < -8) p.x = W + 8;
+        else if(p.x > W + 8) p.x = -8;
+      }
+    }
+  }
+
+  function stepClouds(dt){
+    for(const c of clouds){
+      c.x += c.vx * dt;
+      // 回收边距 200 -> 180：稳态下更多云留在屏幕内，而不是在屏幕外排队
+      if(c.x + c.bounds.minX > W + 180){
+        c.x = -180 - c.bounds.maxX;
+      }
+    }
+  }
+
+  // 光晕只随太阳/月亮位置变化，缓存成离屏 sprite，避免每帧重建径向渐变
+  let glowSprite = null, glowKey = '';
+  function drawGlow(){
+    if(!sun || sun.intensity <= 0.01) return;
+    const {x, y, color, radius, intensity, isMoon} = sun;
+    const key = (x|0)+','+(y|0)+','+(radius|0)+','+intensity.toFixed(3)+','+color.join(',')+','+(isMoon?1:0);
+
+    if(!glowSprite || glowKey !== key){
+      const r = Math.max(2, Math.ceil(radius));
+      const s = document.createElement('canvas');
+      s.width = s.height = r*2;
+      const g2 = s.getContext('2d');
+      if(!g2) return;
+      const g = g2.createRadialGradient(r, r, 0, r, r, radius);
+      g.addColorStop(0,   rgba(color, intensity));
+      g.addColorStop(0.3, rgba(color, intensity*0.45));
+      g.addColorStop(0.7, rgba(color, intensity*0.12));
+      g.addColorStop(1,   rgba(color, 0));
+      g2.fillStyle = g;
+      g2.fillRect(0, 0, r*2, r*2);
+      if(intensity > 0.08){
+        const coreR = isMoon ? 24 : 36;
+        const cg = g2.createRadialGradient(r, r, 0, r, r, coreR);
+        cg.addColorStop(0,   rgba(mixColor(color, [255,255,255], 0.55), Math.min(1, intensity*1.8)));
+        cg.addColorStop(0.55, rgba(color, Math.min(1, intensity*1.3)));
+        cg.addColorStop(1,   rgba(color, 0));
+        g2.fillStyle = cg;
+        g2.beginPath();
+        g2.arc(r, r, coreR, 0, Math.PI*2);
+        g2.fill();
+      }
+      glowSprite = s; glowKey = key;
+    }
+    ctx.drawImage(glowSprite, x - radius, y - radius);
+  }
+
+  function renderCloudSprite(c, dirX){
+    const bd = c.bounds, sc = c.blobs;
+    const pad = 66;
+    const wCss = Math.max(4, Math.ceil(bd.maxX - bd.minX) + pad*2);
+    const hCss = Math.max(4, Math.ceil(bd.maxY - bd.minY) + pad*2);
+    const cv2 = document.createElement('canvas');
+    cv2.width = wCss; cv2.height = hCss;
+    const g2 = cv2.getContext('2d');
+    if(!g2) return null;
+
+    const rr = (a,b) => a + Math.random()*(b-a);
+    const spanY = Math.max(1, bd.maxY - bd.minY);
+    const spanX = Math.max(1, bd.maxX - bd.minX);
+    const main = sc.filter(b=>!b.fringe);
+    const useMain = main.length ? main : sc;
+    const midY = (bd.minY + bd.maxY) * 0.5;
+    g2.translate(pad - bd.minX, pad - bd.minY);
+
+    const wInt = Math.max(0, Math.min(1, sun.intensity));
+    // 时段暖光权重：清晨/黄昏 1.0，午后 0.65，上午 0.45，正午 0.18，夜间 0
+    const warmK = WARM_PHASE[phase] == null ? 0.5 : WARM_PHASE[phase];
+    const warm = mixColor(sun.color, [255,205,140], 0.4);
+    // 雨云/层云底盘更接近照片：底部融化消失
+    const melt = (c.style === 'nimbus' || c.style === 'stratus') ? 0.8 : 1.0;
+
+    // ---- 不规则云团轮廓：16 点噪声半径 + 贝塞尔平滑，边缘有撕裂缺口而非光滑圆 ----
+    const drawBlob = (gc, b) => {
+      const P = b.p || blobNoise();
+      const n = P.length, pts = [];
+      for(let i=0;i<n;i++){
+        const a = i/n*Math.PI*2, m = P[i];
+        pts.push([b.dx + Math.cos(a)*b.rx*m, b.dy + Math.sin(a)*b.ry*m]);
+      }
+      gc.moveTo((pts[0][0]+pts[n-1][0])/2, (pts[0][1]+pts[n-1][1])/2);
+      for(let i=0;i<n;i++){
+        const cx=pts[i][0], cy=pts[i][1], nx=pts[(i+1)%n][0], ny=pts[(i+1)%n][1];
+        gc.quadraticCurveTo(cx, cy, (cx+nx)/2, (cy+ny)/2);
+      }
+      gc.closePath();
+    };
+    const pathCloud = (gc, list) => { gc.beginPath(); for(const b of list) drawBlob(gc, b); };
+
+    // ---- silhouette clip: everything stays inside the cloud ----
+    g2.save();
+    pathCloud(g2, sc);
+    g2.clip();
+
+    // 1) base body: bright lit top -> grey-blue shaded bottom
+    pathCloud(g2, sc);
+    const baseG = g2.createLinearGradient(0, bd.minY, 0, bd.maxY);
+    baseG.addColorStop(0,    rgba(mixColor(c.colorTop,[255,255,255],0.18), c.alpha));
+    baseG.addColorStop(0.26, rgba(c.colorTop, c.alpha*0.98));
+    baseG.addColorStop(0.55, rgba(mixColor(c.colorTop,c.colorBot,0.55), c.alpha*0.96));
+    baseG.addColorStop(0.8,  rgba(mixColor(c.colorTop,c.colorBot,0.85), c.alpha*0.95));
+    baseG.addColorStop(1,    rgba(mixColor(c.colorBot, mixColor(warm,[255,175,90],0.4), 0.28*warmK), c.alpha*0.96));
+    g2.fillStyle = baseG; g2.fill();
+
+    // 2) bottom dark volume (multiply)
+    g2.globalCompositeOperation = 'multiply';
+    const botG = g2.createLinearGradient(0, bd.minY + spanY*0.18, 0, bd.maxY);
+    botG.addColorStop(0,   rgba(c.colorBot,0));
+    botG.addColorStop(0.45,rgba(mixColor(c.colorBot,[22,26,46],0.55), c.alpha*0.26));
+    botG.addColorStop(1,   rgba(mixColor(c.colorBot,[10,13,26],0.8),  c.alpha*0.40));
+    g2.fillStyle = botG; g2.fill();
+    g2.globalCompositeOperation = 'source-over';
+
+    // 3) warm sky-tint in lower body (cloud picks up golden sky below)
+    if(warmK > 0.02){
+      g2.globalCompositeOperation = 'source-over';
+      const warmG = g2.createLinearGradient(0, bd.minY + spanY*0.42, 0, bd.maxY);
+      warmG.addColorStop(0,   rgba(warm,0));
+      warmG.addColorStop(0.55,rgba(warm, c.alpha*warmK*(0.09+0.12*wInt)));
+      warmG.addColorStop(1,   rgba(mixColor(warm,[255,175,90],0.4), c.alpha*warmK*(0.06+0.18*wInt)));
+      g2.fillStyle = warmG; g2.fill();
+    }
+
+    // 4) billow creases between lobes (multiply)
+    if(useMain.length > 1){
+      g2.globalCompositeOperation = 'multiply';
+      for(let i=0;i<useMain.length-1;i++){
+        const a=useMain[i], b=useMain[i+1];
+        const mx=(a.dx+b.dx)/2, my=(a.dy+b.dy)/2 + Math.min(a.ry,b.ry)*0.1;
+        const rw=Math.min(a.rx,b.rx)*0.66, rh=Math.min(a.ry,b.ry)*0.5;
+        const cg = g2.createRadialGradient(mx,my,0,mx,my,rw*1.6);
+        cg.addColorStop(0,  rgba(mixColor(c.colorBot,[22,26,48],0.7), c.alpha*0.16));
+        cg.addColorStop(0.5,rgba(mixColor(c.colorBot,[30,36,60],0.45), c.alpha*0.07));
+        cg.addColorStop(1,  rgba(c.colorBot,0));
+        g2.fillStyle = cg; g2.beginPath(); g2.ellipse(mx,my,rw*1.5,rh*1.6,0,0,Math.PI*2); g2.fill();
+      }
+      g2.globalCompositeOperation = 'source-over';
+    }
+
+    // 5) internal streak / layer texture
+    for(let i=0;i<34;i++){
+      const bx = bd.minX + Math.random()*spanX;
+      const by = bd.minY + Math.random()*spanY;
+      const stre = 4 + Math.random()*14;
+      const hg = g2.createRadialGradient(bx,by,0,bx,by,stre*1.1);
+      const t = Math.random();
+      const col = t < 0.45 ? mixColor(c.colorTop,[255,255,255],0.35)
+               : t < 0.8 ? mixColor(c.colorTop,c.colorBot,0.4)
+                         : mixColor(c.colorBot,[10,12,24],0.5);
+      hg.addColorStop(0,  rgba(col, c.alpha*(0.05+Math.random()*0.06)));
+      hg.addColorStop(0.5,rgba(col, c.alpha*(0.02+Math.random()*0.04)));
+      hg.addColorStop(1,  rgba(col,0));
+      g2.fillStyle = hg;
+      g2.beginPath(); g2.ellipse(bx,by,stre*1.6,stre*0.55,(Math.random()*Math.PI),0,Math.PI*2); g2.fill();
+    }
+
+    // 6) fibrous torn strands along the sunlit top edge
+    g2.save();
+    g2.lineCap = 'round';
+    for(const b of useMain){
+      if(b.dy > bd.minY + spanY*0.62) continue;
+      const k = 2 + (Math.random()*3|0);
+      for(let i=0;i<k;i++){
+        const sx = b.dx + rr(-0.45,0.45)*b.rx;
+        const sy = b.dy - b.ry*rr(0.5,0.9);
+        const len = b.rx*rr(0.22,0.7);
+        const ex = sx + rr(-0.5,0.5)*len + dirX*len*0.35;
+        const ey = sy - rr(0.35,1.15)*len;
+        g2.strokeStyle = rgba(mixColor(c.colorTop,[255,255,255],0.3), c.alpha*rr(0.6,1.4)*(0.03+0.05*wInt+0.07*warmK));
+        g2.lineWidth = Math.max(0.8, Math.min(b.ry,len)*rr(0.05,0.13));
+        g2.beginPath();
+        g2.moveTo(sx,sy);
+        g2.quadraticCurveTo((sx+ex)/2 + rr(-0.3,0.3)*len, (sy+ey)/2 - rr(-0.2,0.2)*len, ex, ey);
+        g2.stroke();
+      }
+    }
+    g2.restore();
+
+    // 7) bottom dissolve: melt the base into the sky (photo-style soft underside)
+    g2.save();
+    g2.globalCompositeOperation = 'destination-out';
+    const dgY0 = bd.maxY - spanY*0.34*melt;
+    const dg = g2.createLinearGradient(0, dgY0, 0, bd.maxY + spanY*0.10);
+    dg.addColorStop(0,   'rgba(0,0,0,0)');
+    dg.addColorStop(0.5, 'rgba(0,0,0,' + (0.26*melt).toFixed(3) + ')');
+    dg.addColorStop(1,   'rgba(0,0,0,' + (0.62*melt).toFixed(3) + ')');
+    g2.fillStyle = dg;
+    g2.fillRect(bd.minX - 2, dgY0, spanX + 4, (bd.maxY - dgY0) + spanY*0.12);
+    g2.restore();
+
+    // 8) sun-facing top highlight + bright rim on lobes
+    const dirY = sun.y < c.y ? -1 : 0.3;
+    const litColor = mixColor(c.colorTop, sun.color, 0.45 + 0.15*warmK);
+    const tops = useMain.filter(b => b.dy < midY);
+    const hi = (tops.length ? tops : useMain).slice(0, Math.max(4, Math.ceil(useMain.length*0.75)));
+    for(let i=0;i<hi.length;i++){
+      const b=hi[i];
+      const hx=b.dx + dirX*b.rx*0.22, hy=b.dy + dirY*b.ry*0.18 - b.ry*0.14;
+      const hg=g2.createRadialGradient(hx,hy,0,hx,hy,Math.max(b.rx,b.ry)*0.85);
+      hg.addColorStop(0,   rgba(mixColor(litColor,[255,255,255],0.5), c.alpha*0.30*sun.intensity));
+      hg.addColorStop(0.45,rgba(litColor, c.alpha*0.13*sun.intensity));
+      hg.addColorStop(1,   rgba(litColor,0));
+      g2.fillStyle=hg; g2.beginPath(); g2.ellipse(hx,hy,b.rx*0.72,b.ry*0.52,0,0,Math.PI*2); g2.fill();
+    }
+    if(c.layer>0 && sun.intensity>0.1){
+      g2.globalAlpha = c.alpha*0.11*sun.intensity;
+      g2.strokeStyle = rgba(mixColor(sun.color,[255,255,255],0.5),1);
+      g2.lineWidth = Math.max(1,(bd.maxX-bd.minX)*0.006);
+      g2.beginPath();
+      for(const b of hi){ g2.moveTo(b.dx+b.rx,b.dy); g2.ellipse(b.dx,b.dy,b.rx*0.99,b.ry*0.99,0,Math.PI*1.1,Math.PI*1.9); }
+      g2.stroke(); g2.globalAlpha=1;
+    }
+
+    g2.restore(); // release clip
+
+    return { canvas: cv2, ox: bd.minX - pad, oy: bd.minY - pad, w: wCss, h: hCss };
+  }
+
+  function drawClouds(){
+    if(!sun || !fxPrefs.showClouds) return;
+
+    for(const c of clouds){
+      const bd = c.bounds;
+      const boxL = c.x + bd.minX, boxR = c.x + bd.maxX;
+      if(boxR < -240 || boxL > W + 240) continue;
+
+      const dirX = Math.sign(sun.x - c.x) || 0;
+      if(!c.sprite || c.spriteDir !== dirX){
+        c.sprite = renderCloudSprite(c, dirX);
+        c.spriteDir = dirX;
+      }
+      if(c.sprite){
+        ctx.drawImage(c.sprite.canvas, c.x + c.sprite.ox, c.y + c.sprite.oy);
+      }
+    }
+  }
+
+  function drawParticles(){
+    const pal = TIME_PAL[phase];
+
+    ctx.lineCap = 'round';
+    for(let L=0; L<3; L++){
+      ctx.beginPath();
+      let has = false;
+      for(const p of particles){
+        if(p.type !== 'rain' || p.lv !== L) continue;
+        const dx = p.vx / p.vy * p.len;
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - dx, p.y - p.len);
+        has = true;
+      }
+      if(has){
+        ctx.strokeStyle = rgba(pal.rain, [0.12, 0.22, 0.34][L]);
+        ctx.lineWidth = 0.8 + L * 0.4;
+        ctx.stroke();
+      }
+    }
+
+    for(const p of particles){
+      if(p.type === 'snow'){
+        ctx.fillStyle = rgba(pal.snow, 1);
+        ctx.globalAlpha = p.a;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if(p.type === 'fog'){
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+        g.addColorStop(0,    `rgba(${p.rgb},${p.a})`);
+        g.addColorStop(0.55, `rgba(${p.rgb},${p.a*0.55})`);
+        g.addColorStop(1,    `rgba(${p.rgb},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+        ctx.fill();
+      } else if(p.type === 'dust'){
+        ctx.fillStyle = rgba(pal.dust, 1);
+        ctx.globalAlpha = p.a;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if(p.type === 'mote'){
+        ctx.fillStyle = rgba(pal.mote, 1);
+        ctx.globalAlpha = 0.10 + 0.15 * (0.5 + 0.5*Math.sin(clock*1.1 + p.phase));
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function drawStars(){
+    let has = false;
+    for(const p of particles){
+      if(p.type !== 'star') continue;
+      if(!has){ ctx.fillStyle = '#ffffff'; has = true; }
+      const tw = 0.5 + 0.5 * Math.sin(clock * p.speed + p.phase);
+      ctx.globalAlpha = 0.22 + tw * 0.62;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+      ctx.fill();
+    }
+    if(has) ctx.globalAlpha = 1;
+  }
+
+  function makeBolt(){
+    let x = rnd(W*0.25, W*0.75), y = -10;
+    const pts = [[x,y]];
+    const endY = H * rnd(0.55, 0.85);
+    while(y < endY){
+      y += rnd(28, 62);
+      x += rnd(-46, 46);
+      pts.push([x,y]);
+    }
+    return pts;
+  }
+
+  function drawStorm(dt){
+    if(flash <= 0){
+      nextFlash -= dt;
+      if(nextFlash <= 0){
+        flash = 1;
+        bolt = makeBolt();
+        nextFlash = rnd(3.5, 9);
+      }
+    }
+    if(flash > 0){
+      if(bolt){
+        ctx.beginPath();
+        ctx.moveTo(bolt[0][0], bolt[0][1]);
+        for(let i=1;i<bolt.length;i++) ctx.lineTo(bolt[i][0], bolt[i][1]);
+        ctx.strokeStyle = `rgba(170,200,255,${flash*0.28})`;
+        ctx.lineWidth = 9;
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(255,255,255,${Math.min(1, flash*1.6)})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.fillStyle = `rgba(206,224,255,${flash*0.30})`;
+      ctx.fillRect(0,0,W,H);
+      flash = Math.max(0, flash - dt*2.2);
+      if(flash <= 0) bolt = null;
+    }
+  }
+
+  const FRAME_MS = 1000/30;   // 30fps 上限：观感几乎无差别，耗电明显下降
+  let lastPaint = 0;
+  function frame(t){
+    if(!running) return;
+    raf = requestAnimationFrame(frame);
+    if(t - lastPaint < FRAME_MS - 1.5) return;   // 丢弃多余帧，避免 60/120Hz 满负荷
+    const dt = lastPaint ? Math.min((t - lastPaint)/1000, 0.08) : 0.016;
+    lastPaint = t;
+    lastT = t;
+    clock += dt;
+
+    try{
+      ctx.clearRect(0,0,W,H);
+      drawGlow();
+      stepClouds(dt);
+      drawStars();          // 星星画在云层后面，云缝里自然露出
+      drawClouds();
+      stepParticles(dt);
+      drawParticles();
+      if(mode === 'storm') drawStorm(dt);
+    }catch(err){
+      if(window.console && console.warn) console.warn('WeatherFX frame error:', err);
+    }
+  }
+
+  function start(){
+    if(!cv || running || document.hidden) return;
+    running = true;
+    lastT = 0;
+    lastPaint = 0;
+    raf = requestAnimationFrame(frame);
+  }
+
+  function stop(){
+    running = false;
+    if(raf) cancelAnimationFrame(raf);
+    raf = null;
+  }
+
+  function set(weatherKey){
+    init();
+    if(!cv) return;
+
+    const p = getTimePhase();
+    if(weatherKey === mode && p === phase){
+      if(!running) start();
+      return;
+    }
+
+    mode  = weatherKey;
+    phase = p;
+    build(mode);
+    cv.classList.add('on');
+    cv.style.opacity = String(fxPrefs.fxOpacity);
+    start();
+  }
+
+  let rebuildTimer = null;
+  function applyPrefs(patch){
+    fxPrefs = normPrefs(Object.assign({}, fxPrefs, patch||{}));
+    try{ localStorage.setItem(FX_KEY, JSON.stringify(fxPrefs)); }catch(e){}
+    if(cv) cv.style.opacity = String(fxPrefs.fxOpacity);
+    if(mode){
+      // 合并连续滑动事件，避免每个 input 都重建整片云层导致卡顿
+      if(rebuildTimer) clearTimeout(rebuildTimer);
+      rebuildTimer = setTimeout(function(){
+        rebuildTimer = null;
+        if(mode) build(mode);
+        if(!running) start();
+      }, 60);
+      if(!running) start();
+    }
+    if(typeof window.applyPanelAlpha==='function') window.applyPanelAlpha();
+  }
+  function getPrefs(){ return Object.assign({}, fxPrefs); }
+  function getDefaults(){ return Object.assign({}, FX_DEFAULTS); }
+
+  function pause(){ stop(); }
+  function resume(){ if(mode) start(); }
+  return { set, applyPrefs, getPrefs, getDefaults, pause, resume };
+})();
+
+
+function applyPanelAlpha(){
+  try{
+    var p = (typeof WeatherFX!=='undefined' && WeatherFX.getPrefs) ? WeatherFX.getPrefs() : {panelAlpha:1};
+    var mul = Math.max(0.4, Math.min(1.6, Number(p.panelAlpha) || 1));
+    var body = document.body;
+    var probes = [body, document.documentElement];
+    var varName = null, i, v = '';
+    for(i=0;i<probes.length;i++){
+      v = getComputedStyle(probes[i]).getPropertyValue('--panel-bg').trim();
+      if(v){ varName = '--panel-bg'; break; }
+    }
+    if(!varName){
+      for(i=0;i<probes.length;i++){
+        v = getComputedStyle(probes[i]).getPropertyValue('--card-bg').trim();
+        if(v){ varName = '--card-bg'; break; }
+      }
+    }
+    if(!varName) return;
+    // 先移除内联，读取主题原始 rgba
+    body.style.removeProperty(varName);
+    v = getComputedStyle(body).getPropertyValue(varName).trim();
+    if(!v) v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    if(!v) return;
+    var m = v.match(/rgba?\(([^)]+)\)/i);
+    if(!m) return;
+    var parts = m[1].split(',').map(function(s){ return parseFloat(s); });
+    if(parts.length < 4) parts.push(1);
+    var a = Math.max(0.05, Math.min(1, parts[3] * mul));
+    body.style.setProperty(varName,
+      'rgba(' + Math.round(parts[0]) + ',' + Math.round(parts[1]) + ',' + Math.round(parts[2]) + ',' + (Math.round(a*100)/100) + ')');
+  }catch(e){}
+}
+
+function applyWeatherTheme(skycon){
+  const key = WEATHER_THEME[skycon] || 'cloudy';
+  if(document.body.dataset.weather !== key){
+    document.body.dataset.weather = key;
+  }
+  WeatherFX.set(key);
+  applyPanelAlpha();
+}
+
+/* ================================================================
+   工具函数
+   ================================================================ */
+const $   = id => document.getElementById(id);
+const num = (x,d=0) => Number.isFinite(Number(x)) ? Number(x) : d;
+const sky = x => SM[x] || ['☁️', x || '未知'];
+const pct = x => Math.round(num(x)*100);
+
+function jsonp(url, timeoutMs){
+  return new Promise((ok,no)=>{
+    const cb='cb'+Date.now()+Math.random().toString(36).slice(2);
+    const s=document.createElement('script');
+    const t=setTimeout(()=>{s.remove();delete window[cb];no(Error('请求超时'))},timeoutMs||15000);
+    window[cb]=x=>{clearTimeout(t);s.remove();delete window[cb];ok(x)};
+    s.onerror=()=>{clearTimeout(t);s.remove();delete window[cb];no(Error('API请求失败'))};
+    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;
+    document.body.appendChild(s);
+  });
+}
+
+function windLevel(v){
+  v=num(v);
+  const a=[0,1,6,12,20,29,39,50,62,75,89,103,118];
+  const n=['无风','微风拂面','清风徐来','树叶摇摆','树枝摇动','风力强劲','风力强劲','风力超强','狂风大作','狂风呼啸','暴风','暴风','飓风'];
+  let i=0;for(let j=0;j<a.length;j++) if(v>=a[j]) i=j;
+  return i+'级 · '+v.toFixed(1)+' km/h · '+n[i];
+}
+
+function windDir(v){
+  v=num(v);
+  const dirs=['北风','东北风','东风','东南风','南风','西南风','西风','西北风'];
+  const idx=Math.round(((v%360)+360)%360/45)%8;
+  return dirs[idx];
+}
+
+function temp(d){
+  if(!d) return [0,0];
+  if(d.min!=null && d.max!=null) return [num(d.min), num(d.max)];
+  if(d.temperature) return [num(d.temperature.min), num(d.temperature.max)];
+  return [0,0];
+}
+
+function ds(d){
+  if(d==null) return 'CLOUDY';
+  if(typeof d==='string') return d;
+  if(typeof d.skycon==='string') return d.skycon;
+  if(d.skycon&&typeof d.skycon.value==='string') return d.skycon.value;
+  if(typeof d.value==='string') return d.value;
+  return 'CLOUDY';
+}
+
+function dayName(x,i){
+  if(i===0) return '今天'; if(i===1) return '明天'; if(i===2) return '后天';
+  const d=new Date(x);
+  if(isNaN(d.getTime())) return '';
+  return ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+}
+
+function mdStr(x){
+  if(!x) return '';
+  const d=new Date(x);
+  if(isNaN(d.getTime())){
+    const m=/^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(x));
+    if(m) return `${Number(m[2])}/${Number(m[3])}`;
+    return '';
+  }
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+function hTime(x){ return x.datetime || x.time; }
+
+/* ================================================================
+   逐时图表
+   ================================================================ */
+let chartObj = null;
+let chartTimes = [];
+let chartCount = 0;
+
+const HUM_ROW_RATIO  = 0.22;
+const TEMP_TOP_PCT   = 0.42;
+const TEMP_SPAN_PCT  = 0.22;
+
+const tempLabelPlugin = {
+  id:'tempLabelPlugin',
+  afterDatasetsDraw(chart){
+    const idx = chart.data.datasets.findIndex(d=>d.label==='气温');
+    if(idx<0) return;
+    const meta = chart.getDatasetMeta(idx);
+    if(!meta||!meta.data) return;
+    const arr = chart.data.datasets[idx].data;
+    const ctx = chart.ctx;
+    const area = chart.chartArea;
+    ctx.save();
+    ctx.font='700 12px system-ui,-apple-system,sans-serif';
+    ctx.fillStyle='#ffc271';
+    ctx.textAlign='center';
+    ctx.textBaseline='bottom';
+    meta.data.forEach((pt,i)=>{
+      if(pt.x<area.left-6||pt.x>area.right+6) return;
+      ctx.fillText(Math.round(arr[i])+'°', pt.x, pt.y-8);
+    });
+    ctx.restore();
+  }
+};
+
+const humidityRowPlugin = {
+  id:'humidityRowPlugin',
+  afterDatasetsDraw(chart){
+    const idx = chart.data.datasets.findIndex(d=>d.label==='湿度');
+    if(idx<0) return;
+    const meta = chart.getDatasetMeta(idx);
+    if(!meta||!meta.data||!meta.data.length) return;
+    const arr = chart.data.datasets[idx].data;
+    const ctx = chart.ctx;
+    const area = chart.chartArea;
+    const rowY = area.bottom - (area.bottom - area.top) * HUM_ROW_RATIO;
+    ctx.save();
+    ctx.font='600 12px system-ui,-apple-system,sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillStyle='#c8e4ff';
+    meta.data.forEach((pt,i)=>{
+      if(pt.x<area.left-4||pt.x>area.right+4) return;
+      ctx.fillText(Math.round(arr[i])+'%', pt.x, rowY);
+    });
+    ctx.restore();
+  }
+};
+
+function drawChart(hourly){
+  const temps = (hourly.temperature    || []).slice(0,48);
+  const hums  = (hourly.humidity       || []).slice(0,48);
+  const precs = (hourly.precipitation  || []).slice(0,48);
+  const cv = $('chart');
+  if(!cv || !temps.length) return;
+
+  chartTimes = temps.map(x=>hTime(x));
+  chartCount = temps.length;
+
+  const labels = temps.map(x=>{
+    const d = new Date(hTime(x));
+    return isNaN(d.getTime()) ? '--:--' : String(d.getHours()).padStart(2,'0')+':00';
+  });
+  const tvals = temps.map(x=>num(x.value));
+  const hvals = hums.length ? hums.map(x=>pct(x.value)) : null;
+  const pvals = precs.map(x=>num(x.value));
+
+  const tMin = Math.min(...tvals);
+  const tMax = Math.max(...tvals);
+  const tSpan = Math.max(tMax - tMin, 1.5);
+  const range = tSpan / TEMP_SPAN_PCT;
+  const yMax = tMax + TEMP_TOP_PCT * range;
+  const yMin = yMax - range;
+  const pMax = Math.max(...pvals, 0.1);
+
+  if(chartObj){ chartObj.destroy(); chartObj = null; }
+
+  const datasets = [
+    { type:'bar', label:'降水', data:pvals, yAxisID:'y1',
+      backgroundColor:'#4ebcff33', borderColor:'#4ebcff77', borderWidth:1,
+      borderRadius:3, barPercentage:.6, order:3 },
+    { type:'line', label:'气温', data:tvals, yAxisID:'y',
+      borderColor:'#ffb34f', borderWidth:2.6,
+      pointRadius:4, pointHoverRadius:6,
+      pointBackgroundColor:'#ffb34f',
+      pointBorderColor:'#0b1e3a', pointBorderWidth:1.6,
+      tension:.4, fill:true, order:1,
+      backgroundColor:c=>{
+        const a = c.chart.chartArea, cc = c.chart.ctx;
+        if(!a) return 'rgba(255,179,79,.15)';
+        const g = cc.createLinearGradient(0, a.top, 0, a.bottom);
+        g.addColorStop(0,'rgba(255,179,79,.22)');
+        g.addColorStop(1,'rgba(255,179,79,0)');
+        return g;
+      }}
+  ];
+  if(hvals){
+    datasets.push({
+      type:'line', label:'湿度', data:hvals, yAxisID:'y2',
+      borderColor:'transparent', pointRadius:0, fill:false, order:2
+    });
+  }
+
+  chartObj = new Chart(cv, {
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{ duration:0 },
+      events:[],
+      interaction:{ mode:null, intersect:false },
+      layout:{ padding:{ top:16, right:14, bottom:2, left:0 } },
+      plugins:{ legend:{ display:false }, tooltip:{ enabled:false } },
+      scales:{
+        x:{ grid:{display:false},
+            ticks:{ color:'#b9cee0', maxRotation:0, autoSkip:true, maxTicksLimit:24, font:{size:11} } },
+        y:{  display:false, min:yMin, max:yMax },
+        y1:{ display:false, min:0, max:pMax*4, position:'right' },
+        y2:{ display:false, min:0, max:100, position:'right' }
+      }
+    },
+    plugins:[ tempLabelPlugin, humidityRowPlugin ]
+  });
+
+  requestAnimationFrame(paintYAxisLabels);
+  bindHourlyScroll();
+}
+
+function paintYAxisLabels(){
+  if(!chartObj || !chartObj.chartArea) return;
+  const area = chartObj.chartArea;
+  const el = $('yaxis'); if(!el) return;
+  const tempCenter = TEMP_TOP_PCT + TEMP_SPAN_PCT/2;
+  const tempY = area.top + (area.bottom - area.top) * tempCenter;
+  const humY  = area.bottom - (area.bottom - area.top) * HUM_ROW_RATIO;
+  el.innerHTML =
+    `<span class="lbl-temp" style="top:${tempY.toFixed(1)}px">温度</span>` +
+    `<span class="lbl-hum"  style="top:${humY.toFixed(1)}px">湿度</span>`;
+}
+
+function bindHourlyScroll(){
+  const scroller = document.getElementById('chartScroll');
+  const badge    = document.getElementById('hourlyDate');
+  if(!scroller || !badge) return;
+
+  const update = ()=>{
+    if(!chartTimes.length) return;
+    const totalW  = scroller.firstElementChild ? scroller.firstElementChild.offsetWidth : 1440;
+    const innerW  = totalW - 14;
+    const spacing = innerW / Math.max(chartCount-1, 1);
+    const idx = Math.max(0, Math.min(chartCount-1, Math.floor(scroller.scrollLeft / spacing)));
+
+    const d = new Date(chartTimes[idx]);
+    if(isNaN(d.getTime())) return;
+    const dn = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+    badge.textContent = `${d.getMonth()+1}/${d.getDate()} ${dn}`;
+  };
+
+  scroller.onscroll = update;
+  update();
+}
+
+let resizeTimer = null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{
+    if(chartObj) requestAnimationFrame(()=>{
+      paintYAxisLabels();
+      bindHourlyScroll();
+    });
+  }, 120);
+});
+
+/* ================================================================
+   降水提示
+   ================================================================ */
+function relHourLabel(x, now){
+  const d = new Date(x);
+  if(isNaN(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2,'0') + '时';
+  const dayStart = t => new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+  const dayDiff = Math.round((dayStart(d) - dayStart(now)) / 86400000);
+  const day = dayDiff <= 0 ? '今天'
+            : dayDiff === 1 ? '明天'
+            : dayDiff === 2 ? '后天'
+            : ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+  return day + hh;
+}
+
+function buildRainEvents(hp){
+  const events = [];
+  let cur = null;
+  for(let i=0;i<hp.length;i++){
+    const v = num(hp[i].value);
+    if(v > 0.031){
+      if(cur){ cur.end = i; cur.peak = Math.max(cur.peak, v); }
+      else cur = { start:i, end:i, peak:v };
+    }else if(cur){
+      events.push(cur); cur = null;
+    }
+  }
+  if(cur) events.push(cur);
+  return events;
+}
+
+function buildRainChips(r, umbrellaActive){
+  const hp = (r.hourly && r.hourly.precipitation) || [];
+  const now = new Date();
+  const events = buildRainEvents(hp);
+  const in24    = events.find(e=>e.start < 24);
+  const after24 = events.find(e=>e.start >= 24);
+  const chips = [];
+
+  if(in24){
+    chips.push(`<span class="rain-chip"><span class="rn-ico">🌧️</span><b>${relHourLabel(hTime(hp[in24.start]), now)}</b>前后可能有雨</span>`);
+    if(after24){
+      chips.push(`<span class="rain-chip"><span class="rn-ico">🌧️</span><b>${relHourLabel(hTime(hp[after24.start]), now)}</b>前后可能有雨</span>`);
+    }
+  }else if(after24){
+    chips.push(`<span class="rain-chip dry"><span class="rn-ico">🌤️</span>${umbrellaActive?'预报未来24小时无明显降水':'未来24小时无降水'}</span>`);
+    chips.push(`<span class="rain-chip"><span class="rn-ico">🌧️</span><b>${relHourLabel(hTime(hp[after24.start]), now)}</b>前后可能有雨</span>`);
+  }else{
+    chips.push(`<span class="rain-chip dry"><span class="rn-ico">🌤️</span>${umbrellaActive?'预报未来48小时无明显降水':'未来48小时无降水'}</span>`);
+  }
+
+  return chips.join('');
+}
+
+function intensityWord(v){
+  if(v < 0.031) return '';
+  if(v < 0.25)  return '小雨';
+  if(v < 0.35)  return '中雨';
+  if(v < 0.48)  return '大雨';
+  return '暴雨';
+}
+
+function buildUmbrellaChip(rt, forecastDry48){
+  const p = rt && rt.precipitation;
+  if(!p) return '';
+  const localV = num(p.local && p.local.intensity);
+  const nV = num(p.nearest && p.nearest.intensity);
+  const nD = num(p.nearest && p.nearest.distance);
+
+  if(localV >= 0.031){
+    return `<span class="rain-chip"><span class="rn-ico">🌧️</span><b>附近正在下${intensityWord(localV)}</b>，出门带把伞吧</span>`;
+  }
+
+  if(nV >= 0.031 && nD > 0 && nD <= 20){
+    const km = Math.round(nD);
+    const where = nD < 1 ? '附近 1 公里内' : `${km} 公里外`;
+    const chipText = km <= 5
+      ? `<b>${where}正在下${intensityWord(nV)}</b>，` + (forecastDry48 ? '出门建议带把伞' : '雨可能靠近，出门带把伞吧')
+      : `<b>${where}正在下${intensityWord(nV)}</b>`;
+    return `<span class="rain-chip"><span class="rn-ico">🌧️</span>${chipText}</span>`;
+  }
+  return '';
+}
+
+/* ================================================================
+   主渲染
+   ================================================================ */
+function openSettings(){
+  if(NATIVE_CONFIG && NATIVE_CONFIG.openSettings){
+    NATIVE_CONFIG.openSettings();
+  }else{
+    console.log('当前不在原生环境，设置按钮无效');
+  }
+}
+
+function draw(d){
+  const r  = d.result || {};
+  const rt = r.realtime || {};
+  const h  = r.hourly   || {};
+  const dy = r.daily    || {};
+
+  const dayTemps = dy.temperature || [];
+  const daySky   = dy.skycon      || [];
+  const dayAstro = dy.astro       || [];
+
+  const today     = temp(dayTemps[0]);
+  const skyconKey = ds(rt.skycon);
+  const s         = sky(skyconKey);
+  const w         = rt.wind || {};
+  const aq        = rt.air_quality || {};
+  const vis       = num(rt.visibility);
+  const cloud     = pct(rt.cloudrate);
+  const aqiChn    = aq.aqi?.chn ?? '--';
+  const aqiDesc   = aq.description?.chn || '';
+
+  applyWeatherTheme(skyconKey);
+
+  const astro = dayAstro[0] || {};
+  const sr = astro.sunrise?.time || '—';
+  const ss = astro.sunset?.time  || '—';
+
+  let uvIdx = null;
+  const rtUV = rt.life_index && rt.life_index.ultraviolet;
+  const dailyUVArr = (dy.life_index && dy.life_index.ultraviolet) || [];
+  if(rtUV && rtUV.index != null){
+    uvIdx = Number(rtUV.index);
+  }else if(dailyUVArr[0] && dailyUVArr[0].index != null){
+    uvIdx = Number(dailyUVArr[0].index);
+  }
+  const uvBadge = (uvIdx !== null && isFinite(uvIdx))
+    ? `<span class="uv-badge">${UV_ICON}紫外线<b>${uvIdx}</b></span>`
+    : '';
+
+  $('loc').textContent = PLACE_NAME;
+  $('upd').textContent = '↻ 更新 ' + new Date().toLocaleTimeString('zh-CN',{hour12:false});
+
+  const hero = `<section class="hero card">
+    <div class="hero-temp">${rt.temperature!=null?num(rt.temperature).toFixed(1):'--'}<small>°</small></div>
+    <div class="hero-sky"><span class="hero-icon">${s[0]}</span><span>${s[1]}</span></div>
+    <div class="hero-range">最高 ${today[1].toFixed(1)}° · 最低 ${today[0].toFixed(1)}°</div>
+  </section>`;
+
+  const metrics = [
+    `<div class="card metric">
+       <div class="mi">🌡️</div>
+       <div><div class="ml">体感</div><div class="mv">${num(rt.apparent_temperature).toFixed(1)}°</div><div class="ms">体感温度</div></div>
+     </div>`,
+    `<div class="card metric">
+       <div class="mi">💨</div>
+       <div>
+         <div class="ml">风向</div>
+         <div class="mv">${windDir(w.direction)}</div>
+         <div class="ms">${windLevel(w.speed)}</div>
+       </div>
+     </div>`,
+    `<div class="card metric">
+       <div class="mi">💧</div>
+       <div><div class="ml">湿度</div><div class="mv">${pct(rt.humidity)}%</div><div class="ms">相对湿度</div></div>
+     </div>`,
+    `<div class="card metric">
+       <div class="mi">🍃</div>
+       <div><div class="ml">空气质量</div><div class="mv">${aqiChn}</div><div class="ms">${aqiDesc||'AQI · 中国标准'}</div></div>
+     </div>`,
+    `<div class="card metric metric-sun">
+       <div class="mi">☀️</div>
+       <div class="ms-body">
+         <div class="ml">日出 · 日落</div>
+         <div class="ms-times">
+           <span class="sun-icon" style="color:#ffc271">${SUNRISE_ICON}</span>
+           <span class="rise">${sr}</span>
+           <span class="sep">/</span>
+           <span class="set">${ss}</span>
+           <span class="sun-icon" style="color:#ff9f5a">${SUNSET_ICON}</span>
+         </div>
+       </div>
+     </div>`,
+    `<div class="card metric">
+       <div class="mi">👁️</div>
+       <div>
+         <div class="ml">能见度</div>
+         <div class="mv">${vis.toFixed(1)} km</div>
+         <div class="ms">卫星云图总云量 ${cloud}%</div>
+       </div>
+     </div>`
+  ].join('');
+
+  const count = Math.min(dayTemps.length, 3);
+  const slice = dayTemps.slice(0, count);
+  const allLo = Math.min(...slice.map(x=>temp(x)[0]));
+  const allHi = Math.max(...slice.map(x=>temp(x)[1]));
+  const span  = Math.max(allHi - allLo, 1);
+
+  let dayRows = '';
+  for(let i=0; i<count; i++){
+    const t  = dayTemps[i];
+    const z  = temp(t);
+    const dateKey = t.date || t.fxDate;
+    const q  = sky(ds(daySky[i]));
+    const week = dayName(dateKey, i);
+    const md   = mdStr(dateKey);
+
+    const left  = ((z[0]-allLo)/span) * 100;
+    const width = ((z[1]-z[0])/span) * 100;
+
+    let marker = '';
+    if(i===0 && rt.temperature!=null){
+      const cur = num(rt.temperature);
+      const pos = (cur - z[0]) / Math.max(z[1]-z[0], 0.01);
+      if(pos>=0 && pos<=1){
+        marker = `<span class="day-marker" style="left:${(left + pos*width).toFixed(1)}%"></span>`;
+      }
+    }
+
+    dayRows += `<div class="day-row">
+      <div class="day-label">
+        <b>${week}</b>
+        <span class="dl-md">${md}</span>
+        <span class="dl-cond">${q[1]}</span>
+      </div>
+      <div class="day-icon">${q[0]}</div>
+      <div class="day-lo">${z[0].toFixed(1)}°</div>
+      <div class="day-bar-wrap">
+        <div class="day-bar">
+          <i style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></i>
+          ${marker}
+        </div>
+      </div>
+      <div class="day-hi">${z[1].toFixed(1)}°</div>
+    </div>`;
+  }
+
+  const forecastDry48 = !buildRainEvents((r.hourly && r.hourly.precipitation) || []).length;
+  const umbrellaChip = buildUmbrellaChip(rt, forecastDry48);
+  const rainChips = buildRainChips(r, !!umbrellaChip);
+
+  const html =
+    hero +
+    `<section class="grid">${metrics}</section>` +
+    `<section class="card section">
+       <div class="hourly-head"><div class="htitle">逐时预报</div></div>
+       <div class="hourly-badges">
+         <span class="hourly-date" id="hourlyDate">--</span>
+         ${uvBadge}
+         ${umbrellaChip}
+         ${rainChips}
+       </div>
+       <div class="chart-wrap">
+         <div class="y-axis" id="yaxis"></div>
+         <div class="chart-scroll" id="chartScroll">
+           <div class="chartbox"><canvas id="chart"></canvas></div>
+         </div>
+       </div>
+     </section>` +
+    `<section class="card section">
+       <div class="st"><span>未来 48 小时天气</span></div>
+       <div class="days-v">${dayRows}</div>
+     </section>` +
+    `<div class="foot">
+  <span>天气数据来自</span>
+  <svg viewBox="0 0 32 32" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;">
+    <path d="M16 15 C14.5 9.5 8 9 6 14 C4 19 7 23 12 23 H20 C25 23 27 17 24 13 C21.5 9 17 10 16 15" />
+  </svg>
+  <span>彩云天气 · API</span>
+</div>`;
+
+  $('app').innerHTML = html;
+  drawChart(h);
+}
+
+/* ================================================================
+   缓存
+   ================================================================ */
+const WEATHER_CACHE_KEY = 'caiyun_weather_cache_v1';
+
+function readWeatherCache(){
+  try{
+    const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+    if(!raw) return null;
+    const item = JSON.parse(raw);
+    if(!item || !item.data || item.data.status !== 'ok') return null;
+    return item;
+  }catch(e){ return null; }
+}
+
+function saveWeatherCache(data){
+  try{
+    localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(), location: LOCATION, place: PLACE_NAME, data
+    }));
+  }catch(e){}
+}
+
+function showCachedWeather(){
+  const cache = readWeatherCache();
+  if(!cache) return false;
+  try{ draw(cache.data); return true; }
+  catch(e){ return false; }
+}
+
+/* ================================================================
+   加载 / 刷新
+   ================================================================ */
+let nativeWeatherWaiters = [];
+let nativeWeatherTimer   = null;
+let hasVisibleWeather    = false;
+
+window.onNativeWeatherResult = function(jsonText){
+  try {
+    const data = JSON.parse(jsonText);
+    if(!data || data.status !== 'ok') throw Error((data && data.error) || 'API 返回异常');
+    saveWeatherCache(data);
+    draw(data);
+    hasVisibleWeather = true;
+    const waiters = nativeWeatherWaiters.splice(0);
+    if(nativeWeatherTimer){ clearTimeout(nativeWeatherTimer); nativeWeatherTimer=null; }
+    waiters.forEach(resolve=>resolve(true));
+  } catch(e) {
+    window.onNativeWeatherError(e.message || '天气数据解析失败');
+  }
+};
+
+window.onNativeWeatherError = function(message){
+  const waiters = nativeWeatherWaiters.splice(0);
+  if(nativeWeatherTimer){ clearTimeout(nativeWeatherTimer); nativeWeatherTimer=null; }
+  if(hasVisibleWeather || readWeatherCache()){
+    waiters.forEach(resolve=>resolve(false));
+    return;
+  }
+  $('app').innerHTML = '<div class="card err">天气数据获取失败：'+String(message||'API请求失败')+
+    '<br>请检查 API Key、API 地址和经纬度。</div>';
+  waiters.forEach(resolve=>resolve(false));
+};
+
+const WEATHER_CACHE_TTL = 30*60*1000;   // 30 分钟内直接复用缓存，省电/省流量/省调用量
+
+async function load(force){
+  try {
+    syncNativeConfig();
+    if(!hasVisibleWeather) hasVisibleWeather = showCachedWeather();
+
+    // 缓存优先：位置未变且缓存新鲜时，不发起网络请求
+    const cached = readWeatherCache();
+    if(!force && cached && cached.location === LOCATION && (Date.now() - cached.savedAt) < WEATHER_CACHE_TTL){
+      return true;
+    }
+
+    if(!CAIYUN.trim()) throw Error('尚未填写 API Key，请进入右上角“设置”填写。');
+    if(!LOCATION.trim() || LOCATION === '0,0') throw Error('尚未设置有效位置，请进入“设置”开启自动定位或填写经纬度。');
+
+    if(window.NativeWeather && window.NativeWeather.requestWeather){
+      return await new Promise(resolve=>{
+        nativeWeatherWaiters.push(resolve);
+        if(!nativeWeatherTimer){
+          nativeWeatherTimer = setTimeout(
+            ()=>window.onNativeWeatherError('请求超时，请检查网络连接或 API 设置'),
+            20000
+          );
+        }
+        try {
+          const started = window.NativeWeather.requestWeather();
+          if(started === false) window.onNativeWeatherError('无法启动天气请求');
+        } catch(e) {
+          window.onNativeWeatherError(e.message || '无法启动天气请求');
+        }
+      });
+    }
+
+    try{
+      const base = String(API_BASE||'').replace(/\/+$/,'');
+      const url = `${base}/${CAIYUN}/${LOCATION}/weather?dailysteps=3&hourlysteps=48&lang=zh_CN`;
+      const d = await jsonp(url);
+      if(!d || d.status !== 'ok'){
+        const apiMsg = (d && (d.error||d.message)) || 'API返回异常';
+        throw Error(apiMsg);
+      }
+      saveWeatherCache(d);
+      draw(d);
+      hasVisibleWeather = true;
+      return true;
+    }catch(e){
+      if(!hasVisibleWeather) {
+        $('app').innerHTML = '<div class="card err">天气数据获取失败：'+e.message+
+          '<br>请检查 API Key、API 地址和经纬度。</div>';
+      }
+      return false;
+    }
+  } catch(e) {
+    if(!hasVisibleWeather) {
+      $('app').innerHTML = '<div class="card err">天气数据获取失败：'+
+        String(e && e.message || 'API请求失败')+
+        '<br>请检查 API Key、API 地址和经纬度。</div>';
+    }
+    return false;
+  }
+}
+
+window.refreshWeather = async function(){
+  try { return await load(true); }
+  finally {
+    if (window.AndroidConfig && window.AndroidConfig.refreshFinished) {
+      window.AndroidConfig.refreshFinished();
+    }
+  }
+};
+
+window.pauseAutoRefresh = function(){};
+window.resumeAutoRefresh = function(){};
+
+if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', load); } else { load(); }
+</script>
+
+<style id="fx-settings-style">
+#fxMask{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.38);opacity:0;pointer-events:none;transition:opacity .2s}
+#fxMask.on{opacity:1;pointer-events:auto}
+#fxPanel{position:fixed;left:8px;right:8px;bottom:6px;z-index:501;display:flex;flex-direction:column;max-height:min(90vh,760px);overflow:hidden;background:var(--panel-bg,var(--card-bg,rgba(20,50,80,.82)));border:1px solid var(--panel-border,var(--card-border,rgba(255,255,255,.12)));border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));transform:translateY(18px);opacity:0;pointer-events:none;transition:transform .22s ease,opacity .22s ease;color:#fff;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+#fxPanel.on{transform:translateY(0);opacity:1;pointer-events:auto}
+.fx-hd{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;flex:0 0 auto}
+.fx-tt{font-size:14px;font-weight:700}
+.fx-sub{font-size:9.5px;color:rgba(255,255,255,.6);margin-top:0}
+.fx-x{border:0;background:rgba(255,255,255,.12);color:#fff;width:24px;height:24px;border-radius:8px;font-size:15px;line-height:1;flex:0 0 auto}
+.fx-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+@media (max-width:330px){.fx-grid{grid-template-columns:1fr}}
+.fx-sec{padding:6px 7px;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);min-width:0}
+.fx-sec-tt{font-size:10px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:2px;letter-spacing:.2px}
+.fx-row{display:flex;align-items:center;justify-content:space-between;gap:3px;padding:2px 0;flex-wrap:wrap}
+.fx-row+.fx-row{border-top:1px solid rgba(255,255,255,.05)}
+.fx-lab{font-size:10.5px;color:rgba(255,255,255,.84);min-width:0;line-height:1.15}
+.fx-val{font-size:9px;color:rgba(255,255,255,.55);margin-left:3px}
+.fx-row input[type=range]{width:100%;max-width:none;accent-color:#7dcaff;height:16px;margin:0}
+.fx-row input[type=checkbox]{width:14px;height:14px;accent-color:#7dcaff;flex:0 0 auto}
+.fx-actions{display:flex;gap:6px;flex:0 0 auto;margin-top:6px;padding-top:7px;border-top:1px solid rgba(255,255,255,.1)}
+.fx-btn{flex:1;border:0;border-radius:8px;padding:6px 8px;font-size:10.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.12)}
+.fx-btn.primary{background:rgba(125,202,255,.22);border:1px solid rgba(125,202,255,.25)}
+@media (min-width:620px){#fxPanel{left:50%;right:auto;width:620px;max-height:min(82vh,700px);transform:translate(-50%,18px)}#fxPanel.on{transform:translate(-50%,0)}}
+@media (min-width:900px){
+  #fxPanel{width:min(920px,92vw);max-height:min(74vh,640px)}
+  .fx-grid{grid-template-columns:repeat(4,1fr);gap:8px}
+  .fx-sec{padding:8px 10px;border-radius:12px}
+  .fx-sec-tt{font-size:11px;margin-bottom:3px}
+  .fx-lab{font-size:11.5px}
+  .fx-val{font-size:10px}
+  .fx-row{padding:3px 0}
+  .fx-row input[type=range]{height:18px}
+  .fx-row input[type=checkbox]{width:15px;height:15px}
+  .fx-btn{font-size:12px;padding:8px 10px;border-radius:9px}
+  .fx-x{width:26px;height:26px}
+}
+</style>
+<div id="fxMask" onclick="closeFxSettings()"></div>
+<div id="fxPanel" aria-hidden="true">
+  <div class="fx-hd">
+    <div><div class="fx-tt">显示设置</div><div class="fx-sub">背景、天光与动态效果（4 类）</div></div>
+    <button class="fx-x" type="button" onclick="closeFxSettings()" aria-label="关闭">×</button>
+  </div>
+  <div class="fx-grid">
+    <div class="fx-sec">
+      <div class="fx-sec-tt">1. 面板与整体</div>
+      <div class="fx-row"><span class="fx-lab">面板不透明度<span class="fx-val" id="fxv_panelAlpha"></span></span><input id="fx_panelAlpha" type="range" min="0.4" max="1.6" step="0.05" oninput="fxSet('panelAlpha',this.value)"></div>
+      <div class="fx-row"><span class="fx-lab">整体效果强度<span class="fx-val" id="fxv_fxOpacity"></span></span><input id="fx_fxOpacity" type="range" min="0" max="1" step="0.05" oninput="fxSet('fxOpacity',this.value)"></div>
+    </div>
+    <div class="fx-sec">
+      <div class="fx-sec-tt">2. 云层</div>
+      <div class="fx-row"><span class="fx-lab">显示云层</span><input id="fx_showClouds" type="checkbox" onchange="fxSet('showClouds',this.checked)"></div>
+      <div class="fx-row"><span class="fx-lab">密度<span class="fx-val" id="fxv_cloudDensity"></span></span><input id="fx_cloudDensity" type="range" min="0.3" max="4" step="0.1" oninput="fxSet('cloudDensity',this.value)"></div>
+      <div class="fx-row"><span class="fx-lab">速度<span class="fx-val" id="fxv_cloudSpeed"></span></span><input id="fx_cloudSpeed" type="range" min="0.3" max="4" step="0.1" oninput="fxSet('cloudSpeed',this.value)"></div>
+      <div class="fx-row"><span class="fx-lab">不透明度<span class="fx-val" id="fxv_cloudOpacity"></span></span><input id="fx_cloudOpacity" type="range" min="0.3" max="2.5" step="0.05" oninput="fxSet('cloudOpacity',this.value)"></div>
+    </div>
+    <div class="fx-sec">
+      <div class="fx-sec-tt">3. 天光与环境</div>
+      <div class="fx-row"><span class="fx-lab">日/月光晕</span><input id="fx_showGlow" type="checkbox" onchange="fxSet('showGlow',this.checked)"></div>
+      <div class="fx-row"><span class="fx-lab">光晕强度<span class="fx-val" id="fxv_glowIntensity"></span></span><input id="fx_glowIntensity" type="range" min="0" max="4" step="0.1" oninput="fxSet('glowIntensity',this.value)"></div>
+      <div class="fx-row"><span class="fx-lab">环境粒子<span class="fx-val" style="display:block;font-size:10px;color:rgba(255,255,255,.45);margin:0">雾/尘/浮光/星</span></span><input id="fx_showParticles" type="checkbox" onchange="fxSet('showParticles',this.checked)"></div>
+      <div class="fx-row"><span class="fx-lab">环境密度<span class="fx-val" id="fxv_particleDensity"></span></span><input id="fx_particleDensity" type="range" min="0.3" max="4" step="0.1" oninput="fxSet('particleDensity',this.value)"></div>
+    </div>
+    <div class="fx-sec">
+      <div class="fx-sec-tt">4. 降水动态</div>
+      <div class="fx-row"><span class="fx-lab">显示雨幕</span><input id="fx_showRain" type="checkbox" onchange="fxSet('showRain',this.checked)"></div>
+      <div class="fx-row"><span class="fx-lab">雨密度<span class="fx-val" id="fxv_rainDensity"></span></span><input id="fx_rainDensity" type="range" min="0.3" max="4" step="0.1" oninput="fxSet('rainDensity',this.value)"></div>
+      <div class="fx-row"><span class="fx-lab">雨速度<span class="fx-val" id="fxv_rainSpeed"></span></span><input id="fx_rainSpeed" type="range" min="0.4" max="4" step="0.1" oninput="fxSet('rainSpeed',this.value)"></div>
+      <div class="fx-row"><span class="fx-lab">显示雪花</span><input id="fx_showSnow" type="checkbox" onchange="fxSet('showSnow',this.checked)"></div>
+      <div class="fx-row"><span class="fx-lab">雪密度<span class="fx-val" id="fxv_snowDensity"></span></span><input id="fx_snowDensity" type="range" min="0.3" max="4" step="0.1" oninput="fxSet('snowDensity',this.value)"></div>
+      <div class="fx-row"><span class="fx-lab">雪速度<span class="fx-val" id="fxv_snowSpeed"></span></span><input id="fx_snowSpeed" type="range" min="0.4" max="4" step="0.1" oninput="fxSet('snowSpeed',this.value)"></div>
+    </div>
+  </div>
+  <div class="fx-actions">
+    <button class="fx-btn primary" type="button" onclick="if(typeof openNativeSettings==='function')openNativeSettings(); else if(typeof openSettings==='function')openSettings();">⚙ 设置</button>
+    <button class="fx-btn" type="button" onclick="fxReset()">恢复默认</button>
+  </div>
+</div>
+<script>
+function hasApiConfigured(){
+  try{
+    if(typeof NATIVE_CONFIG!=='undefined' && NATIVE_CONFIG && NATIVE_CONFIG.getApiKey){
+      return String(NATIVE_CONFIG.getApiKey()||'').trim().length>0;
+    }
+    return String(CAIYUN||'').trim().length>0;
+  }catch(e){ return true; }
+}
+function openWeatherSettings(){
+  // 首次使用且未配置 API 时，直接进入系统设置，避免两次点击。
+  if(typeof NATIVE_CONFIG!=='undefined' && NATIVE_CONFIG && !hasApiConfigured()){
+    openNativeSettings();
+    return;
+  }
+  openFxSettings();
+}
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeFxSettings(); });
+function openFxSettings(){
+  if(typeof WeatherFX!=='undefined' && WeatherFX.pause) WeatherFX.pause();
+  fxSyncUI();
+  var m=document.getElementById('fxMask'), p=document.getElementById('fxPanel');
+  if(m) m.classList.add('on'); if(p){ p.classList.add('on'); p.setAttribute('aria-hidden','false'); }
+}
+function closeFxSettings(){
+  var m=document.getElementById('fxMask'), p=document.getElementById('fxPanel');
+  if(m) m.classList.remove('on'); if(p){ p.classList.remove('on'); p.setAttribute('aria-hidden','true'); }
+  if(typeof WeatherFX!=='undefined' && WeatherFX.resume) WeatherFX.resume();
+}
+function openNativeSettings(){
+  if(typeof NATIVE_CONFIG!=='undefined' && NATIVE_CONFIG && NATIVE_CONFIG.openSettings){ NATIVE_CONFIG.openSettings(); }
+  else if(typeof window.openNativeAppSettings==='function'){ window.openNativeAppSettings(); }
+}
+function fxSyncUI(){
+  if(typeof WeatherFX==='undefined' || !WeatherFX.getPrefs) return;
+  var p=WeatherFX.getPrefs();
+  ['showClouds','showGlow','showParticles','showRain','showSnow'].forEach(function(k){ var el=document.getElementById('fx_'+k); if(el) el.checked=!!p[k]; });
+  ['panelAlpha','fxOpacity','cloudDensity','cloudSpeed','cloudOpacity','glowIntensity','particleDensity','rainDensity','rainSpeed','snowDensity','snowSpeed'].forEach(function(k){
+    var el=document.getElementById('fx_'+k), v=document.getElementById('fxv_'+k);
+    if(el && p[k]!=null) el.value=p[k]; if(v && p[k]!=null) v.textContent=(Math.round(p[k]*100)/100);
+  });
+}
+function fxSet(k,v){
+  if(typeof WeatherFX==='undefined' || !WeatherFX.applyPrefs) return;
+  var o={}; o[k]=(typeof v==='boolean')?v:Number(v);
+  WeatherFX.applyPrefs(o); fxSyncUI();
+  if(k==='panelAlpha' && typeof applyPanelAlpha==='function') applyPanelAlpha();
+}
+function fxReset(){
+  if(typeof WeatherFX==='undefined' || !WeatherFX.getDefaults) return;
+  WeatherFX.applyPrefs(WeatherFX.getDefaults()); fxSyncUI();
+  if(typeof applyPanelAlpha==='function') applyPanelAlpha();
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ if(typeof applyPanelAlpha==='function') applyPanelAlpha(); });
+else if(typeof applyPanelAlpha==='function') applyPanelAlpha();
+</script>
+</body>
+</html>
