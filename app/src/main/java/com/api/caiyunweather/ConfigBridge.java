@@ -17,8 +17,8 @@ public class ConfigBridge {
         return AppConfig.getLon(activity) + "," + AppConfig.getLat(activity);
     }
     @JavascriptInterface public String getPlaceName() { return AppConfig.getPlace(activity); }
-    @JavascriptInterface public boolean isAutoLocation() { return AppConfig.isAutoLocation(activity); }
-    @JavascriptInterface public int getRefreshMin() { return AppConfig.getRefreshMin(activity); }
+    /** H5 每次切换天气主题时保存背景三色，原生下次启动用同色铺底。 */
+    @JavascriptInterface public boolean isAutoLocation() { return AppConfig.isAutoLocation(activity); }    @JavascriptInterface public int getRefreshMin() { return AppConfig.getRefreshMin(activity); }
 
     @JavascriptInterface public int getStatusBarInsetDp() {
         int id = activity.getResources().getIdentifier("status_bar_height", "dimen", "android");
