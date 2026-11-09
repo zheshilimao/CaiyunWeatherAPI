@@ -30,6 +30,8 @@ public final class AppConfig {
     public static double getLat(Context c) { return Double.longBitsToDouble(p(c).getLong(KEY_LAT, Double.doubleToLongBits(DEFAULT_LAT))); }
     public static double getLon(Context c) { return Double.longBitsToDouble(p(c).getLong(KEY_LON, Double.doubleToLongBits(DEFAULT_LON))); }
     public static String getPlace(Context c) { return p(c).getString(KEY_PLACE, DEFAULT_PLACE); }
+
+
     /** @deprecated 自动刷新间隔已移除；保留桥接兼容，返回 0 表示禁用。 */
     @Deprecated
     public static int getRefreshMin(Context c) { return 0; }
