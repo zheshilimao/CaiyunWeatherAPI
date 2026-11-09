@@ -6,6 +6,10 @@
 <title>彩云天气API</title>
 
 <script>
+  /* 首帧前隐藏正文：缓存渲染完成后再一次性显示，避免启动时闪出加载占位 */
+  document.documentElement.classList.add('wx-booting');
+  /* 兜底：主脚本异常时也要把页面显示出来 */
+  setTimeout(function(){ document.documentElement.classList.remove('wx-booting'); }, 2500);
   const NATIVE_CONFIG = window.AndroidConfig || null;
 
   let CAIYUN       = NATIVE_CONFIG ? NATIVE_CONFIG.getApiKey()     : '';
@@ -20,6 +24,40 @@
     LOCATION    = NATIVE_CONFIG.getLocation()  || '';
     PLACE_NAME  = NATIVE_CONFIG.getPlaceName() || '未设置位置';
   }
+
+  /* 开屏首帧：先从本地缓存取上次天气的主题铺底。
+     这样页面第一次绘制就是缓存的天气配色，而不是默认深蓝。 */
+  function bootThemeFromSkycon(s){
+    s = String(s || '').toUpperCase();
+    if(!s) return '';
+    if(/SNOW|SLEET/.test(s)) return 'snow';
+    if(/HAIL|STORM|THUNDER/.test(s)) return 'storm';
+    if(/RAIN/.test(s)){
+      if(/HEAVY/.test(s)) return 'heavy-rain';
+      if(/MODERATE/.test(s)) return 'moderate-rain';
+      return 'light-rain';
+    }
+    if(/HAZE/.test(s)) return 'haze';
+    if(/DUST|SAND/.test(s)) return 'dust';
+    if(/FOG/.test(s)) return 'fog';
+    if(/CLEAR_NIGHT/.test(s)) return 'clear-night';
+    if(/CLEAR/.test(s)) return 'clear';
+    if(/PARTLY/.test(s)) return 'partly';
+    return 'cloudy';
+  }
+  (function applyBootTheme(){
+    try{
+      var raw = localStorage.getItem('caiyun_weather_cache_v1');
+      if(!raw) return;
+      var item = JSON.parse(raw);
+      var key = item && item.theme;
+      if(!key){
+        var rt = item && item.data && item.data.result && item.data.result.realtime;
+        key = bootThemeFromSkycon(rt && rt.skycon);
+      }
+      if(key) document.documentElement.setAttribute('data-boot-weather', key);
+    }catch(e){}
+  })();
 
   if (NATIVE_CONFIG && NATIVE_CONFIG.getStatusBarInsetDp) {
     document.documentElement.style.setProperty('--status-inset', NATIVE_CONFIG.getStatusBarInsetDp() + 'px');
@@ -40,7 +78,13 @@
   --panel-shadow:0 6px 18px rgba(0,0,0,.13);
   --accent-bg:rgba(125,202,255,.15);
 }
-body[data-weather="clear"]{
+
+/* 三段天幕色注册为「可动画颜色」：模式/时段切换时背景渐变整体平滑过渡，
+   而不是同一帧瞬跳（旧 WebView 不认识 @property 时自动回退为瞬切，无害） */
+@property --bg-a{ syntax:'<color>'; inherits:true; initial-value:#4387bd; }
+@property --bg-b{ syntax:'<color>'; inherits:true; initial-value:#0b4e82; }
+@property --bg-c{ syntax:'<color>'; inherits:true; initial-value:#071b3d; }
+body[data-weather="clear"],html[data-boot-weather="clear"]{
   --bg-a:#4a9fd6; --bg-b:#1c6fa8; --bg-c:#073761;
   --tint-1:74,159,214; --tint-2:28,111,168; --tint-3:7,55,97; --tint-4:3,25,45;
   --panel-bg:rgba(20,76,126,.56);
@@ -48,7 +92,7 @@ body[data-weather="clear"]{
   --panel-shadow:0 6px 18px rgba(0,20,50,.16);
   --accent-bg:rgba(140,210,255,.18);
 }
-body[data-weather="clear-night"]{
+body[data-weather="clear-night"],html[data-boot-weather="clear-night"]{
   --bg-a:#3f6699; --bg-b:#17335c; --bg-c:#040a18;
   --tint-1:63,102,153; --tint-2:23,51,92; --tint-3:6,20,42; --tint-4:2,6,14;
   --panel-bg:rgba(12,36,70,.70);
@@ -56,7 +100,7 @@ body[data-weather="clear-night"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.28);
   --accent-bg:rgba(120,180,255,.13);
 }
-body[data-weather="partly"]{
+body[data-weather="partly"],html[data-boot-weather="partly"]{
   --bg-a:#6aa8cf; --bg-b:#31719d; --bg-c:#0d2c4a;
   --tint-1:106,168,207; --tint-2:49,113,157; --tint-3:13,44,74; --tint-4:5,17,30;
   --panel-bg:rgba(22,74,118,.58);
@@ -64,7 +108,7 @@ body[data-weather="partly"]{
   --panel-shadow:0 6px 18px rgba(0,20,45,.16);
   --accent-bg:rgba(130,205,255,.16);
 }
-body[data-weather="cloudy"]{
+body[data-weather="cloudy"],html[data-boot-weather="cloudy"]{
   --bg-a:#7e8e9d; --bg-b:#3c4f62; --bg-c:#111a24;
   --tint-1:126,142,157; --tint-2:60,79,98; --tint-3:17,26,36; --tint-4:6,10,15;
   --panel-bg:rgba(40,56,74,.62);
@@ -72,7 +116,7 @@ body[data-weather="cloudy"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.20);
   --accent-bg:rgba(190,215,240,.12);
 }
-body[data-weather="fog"]{
+body[data-weather="fog"],html[data-boot-weather="fog"]{
   --bg-a:#8493a1; --bg-b:#47565f; --bg-c:#1b232a;
   --tint-1:132,147,161; --tint-2:71,86,95; --tint-3:27,35,42; --tint-4:9,13,16;
   --panel-bg:rgba(50,62,74,.60);
@@ -80,7 +124,7 @@ body[data-weather="fog"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.18);
   --accent-bg:rgba(210,225,240,.14);
 }
-body[data-weather="light-rain"]{
+body[data-weather="light-rain"],html[data-boot-weather="light-rain"]{
   --bg-a:#6b93ac; --bg-b:#2d5c78; --bg-c:#0a1d30;
   --tint-1:107,147,172; --tint-2:45,92,120; --tint-3:10,29,48; --tint-4:4,10,18;
   --panel-bg:rgba(18,50,78,.62);
@@ -88,7 +132,7 @@ body[data-weather="light-rain"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.22);
   --accent-bg:rgba(130,200,255,.14);
 }
-body[data-weather="moderate-rain"]{
+body[data-weather="moderate-rain"],html[data-boot-weather="moderate-rain"]{
   --bg-a:#557f99; --bg-b:#24485f; --bg-c:#06141f;
   --tint-1:85,127,153; --tint-2:36,72,95; --tint-3:6,20,31; --tint-4:2,7,11;
   --panel-bg:rgba(14,40,62,.66);
@@ -96,7 +140,7 @@ body[data-weather="moderate-rain"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.26);
   --accent-bg:rgba(120,190,245,.13);
 }
-body[data-weather="heavy-rain"]{
+body[data-weather="heavy-rain"],html[data-boot-weather="heavy-rain"]{
   --bg-a:#41637d; --bg-b:#1a3549; --bg-c:#040b12;
   --tint-1:65,99,125; --tint-2:26,53,73; --tint-3:4,11,18; --tint-4:1,4,7;
   --panel-bg:rgba(10,30,48,.70);
@@ -104,7 +148,7 @@ body[data-weather="heavy-rain"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.30);
   --accent-bg:rgba(115,180,235,.12);
 }
-body[data-weather="storm"]{
+body[data-weather="storm"],html[data-boot-weather="storm"]{
   --bg-a:#5b5488; --bg-b:#262347; --bg-c:#08061a;
   --tint-1:91,84,136; --tint-2:38,35,71; --tint-3:8,6,26; --tint-4:3,2,10;
   --panel-bg:rgba(22,18,44,.72);
@@ -112,7 +156,7 @@ body[data-weather="storm"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.32);
   --accent-bg:rgba(150,160,235,.14);
 }
-body[data-weather="snow"]{
+body[data-weather="snow"],html[data-boot-weather="snow"]{
   --bg-a:#96b3c9; --bg-b:#54748e; --bg-c:#22303d;
   --tint-1:150,179,201; --tint-2:84,116,142; --tint-3:34,48,61; --tint-4:12,18,24;
   --panel-bg:rgba(48,66,84,.54);
@@ -120,7 +164,7 @@ body[data-weather="snow"]{
   --panel-shadow:0 6px 18px rgba(10,20,35,.14);
   --accent-bg:rgba(200,225,245,.18);
 }
-body[data-weather="haze"]{
+body[data-weather="haze"],html[data-boot-weather="haze"]{
   --bg-a:#a8977a; --bg-b:#5d5442; --bg-c:#241f18;
   --tint-1:168,151,122; --tint-2:93,84,66; --tint-3:36,31,24; --tint-4:13,11,8;
   --panel-bg:rgba(58,50,38,.62);
@@ -128,7 +172,7 @@ body[data-weather="haze"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.20);
   --accent-bg:rgba(235,215,175,.14);
 }
-body[data-weather="dust"]{
+body[data-weather="dust"],html[data-boot-weather="dust"]{
   --bg-a:#b09a70; --bg-b:#66543a; --bg-c:#241d12;
   --tint-1:176,154,112; --tint-2:102,84,58; --tint-3:36,29,18; --tint-4:13,10,6;
   --panel-bg:rgba(60,50,34,.64);
@@ -143,6 +187,40 @@ body{
   font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;
   background:radial-gradient(circle at 80% 5%, var(--bg-a) 0, var(--bg-b) 28%, var(--bg-c) 72%);
   min-height:100vh;position:relative;
+  /* 注册后的颜色变量支持过渡：天幕随主题平滑流变 */
+  transition:--bg-a 1.1s ease,--bg-b 1.1s ease,--bg-c 1.1s ease;
+}
+body.theme-anim-off{ transition:none !important; }
+
+/* 主题转场幕布：视频式 dip——渐入盖幕 → 幕下换景 → 渐出显新景。
+   背景直接消费 --bg-a/b/c，盖幕期间 dataset 已换，撤幕时与底层天幕同色无缝。
+   闲时 display:none —— 不驻留任何全屏合成层，省 GPU 功耗 */
+#fxVeil{
+  position:fixed;inset:-2px;z-index:900;pointer-events:none;display:none;
+  opacity:0;
+  background:radial-gradient(circle at 80% 5%, var(--bg-a) 0, var(--bg-b) 28%, var(--bg-c) 72%);
+}
+
+/* 开屏渐隐层：与原生晴空蓝背板同色（MainActivity.applyBootBackground）。
+   WebView 首帧接管时画面不变（同色衔接），天气/云层就绪后此层缓缓淡出——
+   开屏底色以从容的节奏溶解进天气页面，而不是被页面瞬移覆盖 */
+#fxSplash{
+  position:fixed;inset:0;z-index:898;pointer-events:none;
+  background:linear-gradient(135deg,#5a9bd0 0%,#22608e 55%,#0a2c4e 100%);
+}
+#fxSplash.out{
+  opacity:0; animation:none;
+  transition:opacity 1.0s ease-out;
+}
+/* 兜底：天气数据失败等异常路径下也要保证开屏层最终淡出 */
+@keyframes fxSplashAuto{ to{ opacity:0; } }
+#fxSplash{ animation:fxSplashAuto 2s ease 5.5s forwards; }
+@media (prefers-reduced-motion: reduce){
+  #fxSplash{ animation-duration:.1s; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  body{ transition:none; }
 }
 
 #weatherFx{
@@ -203,6 +281,23 @@ body{
   transition:background-color .6s ease, border-color .6s ease, box-shadow .6s ease;
 }
 .page{position:relative;z-index:1;max-width:1180px;margin:auto;padding:0 18px 8px}
+
+/* 启动门控：脚本同步渲染完缓存后移除 wx-booting，首帧直接是真实天气 */
+html.wx-booting .top,
+html.wx-booting .page{opacity:0}
+
+/* 首次启动（无缓存）时的轻量骨架；有缓存时脚本在首帧前就渲染真实内容，不会出现 */
+#app:empty::before,
+#app:empty::after{
+  content:'';display:block;border-radius:22px;
+  background:linear-gradient(100deg,rgba(255,255,255,.045) 30%,rgba(255,255,255,.10) 50%,rgba(255,255,255,.045) 70%);
+  background-size:220% 100%;
+  animation:wxSkeleton 1.5s ease-in-out infinite;
+}
+#app:empty::before{height:190px;margin:6px 0 12px}
+#app:empty::after{height:118px}
+@keyframes wxSkeleton{0%{background-position:160% 0}100%{background-position:-60% 0}}
+@media (prefers-reduced-motion: reduce){#app:empty::before,#app:empty::after{animation:none}}
 
 .hero{padding:30px 24px 26px;display:flex;flex-direction:column;align-items:center;text-align:center}
 .hero-temp{font-size:112px;font-weight:400;line-height:1;letter-spacing:-6px}
@@ -391,18 +486,19 @@ body{
 </style>
 </head>
 <body>
+<div id="fxSplash" aria-hidden="true"></div>
 <div class="status-glass"></div>
 
 <div class="top">
-  <div class="loc" id="loc">定位加载中…</div>
+  <div class="loc" id="loc"></div>
   <div class="top-right">
-    <div class="muted" id="upd">正在更新…</div>
+    <div class="muted" id="upd"></div>
     <button class="settings-btn" aria-label="设置" onclick="openWeatherSettings()">⚙</button>
   </div>
 </div>
 
 <main class="page">
-  <div id="app">加载中…</div>
+  <div id="app"></div>
 </main>
 
 <script>
@@ -539,6 +635,7 @@ const WeatherFX = (function(){
   let W = 0, H = 0, dpr = 1;
   let mode  = '';
   let phase = 'noon';
+  let bootInstant = true;   // 开屏首帧不做淡入，避免“先静态面板再渐变出天气”
   let particles = [];
   let clouds = [];
   let sun = null;
@@ -568,6 +665,23 @@ const WeatherFX = (function(){
 
   const rnd   = (a,b) => a + Math.random()*(b-a);
   const scale = () => Math.max(0.4, Math.min(1, W/980));
+
+  /* 种子随机：同一朵云(color/纹理)重建时输出逐位相同，
+     交叉淡变的两个 sprite 完全重合，切换期零纹理沸腾 */
+  function mulberry32(seed){
+    let a = seed >>> 0;
+    return function(){
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function seedFrom(n){
+    let x = (n * 2654435761) >>> 0;
+    x ^= x >>> 16; x = (x * 2246822519) >>> 0;
+    x ^= x >>> 13; return x >>> 0;
+  }
 
   function getTimePhase(){
     const h = new Date().getHours();
@@ -669,7 +783,7 @@ const WeatherFX = (function(){
       const p = getTimePhase();
       if(p !== phase){
         phase = p;
-        build(mode);
+        rebuild(mode);   // 时段切换：调色板/天幕/光晕渐变过渡，云保持位置连续
       }
     }, 60000);
   }
@@ -678,40 +792,44 @@ const WeatherFX = (function(){
     if(!cv) return;
     W = window.innerWidth;
     H = window.innerHeight;
-    dpr = Math.min(window.devicePixelRatio || 1, 1.5);   // 降低像素填充率，省电
+    dpr = Math.min(window.devicePixelRatio || 1, 1.3);   // 1.5→1.3：云是柔和渐变，降填充率省电无感
     cv.width  = Math.max(1, Math.round(W*dpr));
     cv.height = Math.max(1, Math.round(H*dpr));
     cv.style.width  = W + 'px';
     cv.style.height = H + 'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
-    if(mode) build(mode);
+    if(mode) rebuild(mode);   // 云坐标按新旧比例续接，旋转/分屏不再整体跳变
+    // width 赋值会清空 canvas；立即渲染一帧补上，避免 30fps 节流期间的空白闪烁
+    paintFrame(0);
   }
 
   // 云团轮廓噪声：16 点半径系数，每 4 点一个“缺口”，避免光滑圆边
-  const blobNoise = () => {
+  const blobNoise = (rng) => {
+    const R = rng || Math.random;
     const p = [];
-    for(let i=0;i<16;i++) p.push(i%4===3 ? 0.74+Math.random()*0.22 : 0.9+Math.random()*0.24);
+    for(let i=0;i<16;i++) p.push(i%4===3 ? 0.74+R()*0.22 : 0.9+R()*0.24);
     return p;
   };
 
-  function makeCloudShape(style, R){
+  function makeCloudShape(style, R, rng){
+    const r2 = rng || Math.random;
     const blobs = [];
-    const rr = (a,b) => a + Math.random()*(b-a);
-    const pick = () => blobs[(Math.random()*blobs.length)|0];
-    const add = (dx,dy,rx,ry,fr) => blobs.push({dx,dy,rx,ry,p:blobNoise(),fringe:fr?1:0});
+    const rr = (a,b) => a + r2()*(b-a);
+    const pick = () => blobs[(r2()*blobs.length)|0];
+    const add = (dx,dy,rx,ry,fr) => blobs.push({dx,dy,rx,ry,p:blobNoise(rng),fringe:fr?1:0});
     const addFringe = (n,pickFn,angA,angB,rs,re) => {
       for(let i=0;i<n;i++){
         const b = pickFn();
         const ang = rr(angA,angB), rad = Math.min(b.rx,b.ry)*rr(rs,re);
         blobs.push({dx:b.dx+Math.cos(ang)*b.rx*rr(0.45,1.0), dy:b.dy+Math.sin(ang)*b.ry*rr(0.35,0.95),
-                    rx:rad*rr(0.85,1.35), ry:rad*rr(0.55,1.05), p:blobNoise(), fringe:1});
+                    rx:rad*rr(0.85,1.35), ry:rad*rr(0.55,1.05), p:blobNoise(rng), fringe:1});
       }
     };
 
     if(style === 'cumulus'){
       // 平底积云：大小不一的主团 + 主团间隙的次级凸起 + 平底盘
       const base = R*0.16;
-      const n = 3 + (Math.random()*2|0);
+      const n = 3 + (r2()*2|0);
       const w = R*rr(1.9,2.45);
       const lobes = [];
       let x = -w/2;
@@ -731,12 +849,12 @@ const WeatherFX = (function(){
       addFringe(3, pick,  Math.PI*0.2,  Math.PI*0.8, 0.12, 0.3);
     } else if(style === 'cumulus-tall'){
       // 塔状积云：底盘 + 中央向上堆叠的上团
-      const base = R*0.18, w = R*rr(1.45,1.85), n = 3 + (Math.random()*2|0);
+      const base = R*0.18, w = R*rr(1.45,1.85), n = 3 + (r2()*2|0);
       const lobes = [];
       let x = -w/2;
       for(let i=0;i<n;i++){ const lw=(w/n)*rr(0.85,1.2); lobes.push({x:x+lw/2, w:lw, r:lw*rr(0.4,0.58)}); x+=lw; }
       for(const L of lobes) add(L.x, base - L.r*rr(0.5,0.8), L.r*rr(1.0,1.25), L.r*rr(0.8,1.0));
-      const tn = 2 + (Math.random()*2|0);
+      const tn = 2 + (r2()*2|0);
       for(let i=0;i<tn;i++){
         const L = pick();
         // 注意：pick() 返回的是 {dx,dy,rx,ry} 云团，不是 {x,r}；
@@ -750,7 +868,7 @@ const WeatherFX = (function(){
       // 层云：整片长板 + 顶部起伏小团，底部几乎水平
       const base = R*0.1, w = R*rr(2.4,3.0), h = R*rr(0.5,0.72);
       add(0, base - h*0.5, w*0.5, h*0.5);
-      const n = 3 + (Math.random()*3|0);
+      const n = 3 + (r2()*3|0);
       for(let i=0;i<n;i++){
         const t = (i+0.5)/n - 0.5;
         add(t*w + rr(-0.06,0.06)*w, base - h*rr(0.55,0.95), w*rr(0.12,0.2), h*rr(0.28,0.45));
@@ -761,7 +879,7 @@ const WeatherFX = (function(){
       // 雨云：宽厚暗盘 + 底部下垂碎絮
       const base = R*0.12, w = R*rr(2.2,2.8), h = R*rr(0.6,0.85);
       add(0, base - h*0.45, w*0.48, h*0.48);
-      const n = 4 + (Math.random()*3|0);
+      const n = 4 + (r2()*3|0);
       for(let i=0;i<n;i++){
         const t = (i+0.5)/n - 0.5;
         add(t*w + rr(-0.05,0.05)*w, base - h*rr(0.5,0.85), w*rr(0.13,0.22), h*rr(0.3,0.48));
@@ -770,7 +888,7 @@ const WeatherFX = (function(){
       addFringe(8, pick, Math.PI*0.1, Math.PI*0.9, 0.16, 0.42);
       addFringe(4, pick, -Math.PI*0.9, -Math.PI*0.1, 0.14, 0.34);
     } else { // cirrus：细长拉丝
-      const n = 11 + (Math.random()*7|0);
+      const n = 11 + (r2()*7|0);
       const w = R*3.3, h = R*0.26;
       for(let i=0;i<n;i++){
         const t = i/(n-1) - 0.5;
@@ -798,45 +916,119 @@ const WeatherFX = (function(){
     return {minX, maxX, minY, maxY};
   }
 
-  function buildClouds(cfg, pal){
-    clouds = [];
-    const [cMin, cMax] = cfg.count;
-    // 云量只由“天气类型 + 密度滑杆”决定；云朵尺寸才随屏幕缩放。
-    // 旧公式额外乘 scale()（手机上被压到 0.55），是默认云量偏少的原因之一。
-    const density = fxPrefs.showClouds ? Math.pow(fxPrefs.cloudDensity, 1.3) : 0;
-    const n = Math.min(72, Math.round((cMin + Math.random()*(cMax - cMin + 1)) * density));
-    // 生成范围只在屏幕左右留少量缓冲，避免大量云停在屏幕外“慢慢飘进来”
-    const spawnPad = Math.max(150, W * 0.12);
+  /* ================================================================
+     云层差分续接：模式/时段切换时不再「全清全造」。
+     - 存量云全部保留坐标 blob/形状/层次，只按新天气更新外观；
+       外观变化通过「旧 sprite -> 新 sprite」逐云交叉淡变完成；
+     - 云量变化走增删：多余的云淡出（pT=0），不足的制造新云淡入（pA 从 0 升）；
+     - 序号 seq 保证淘汰顺序稳定，不再每帧换血。
+     ================================================================ */
+  let cloudSeq = 0;
+  let appKey = '';          // 外观指纹：时段调色板 + 云样式/透明度参数
+  let vw = 0, vh = 0;       // 上次布局尺寸，切屏/旋转时按比例续接坐标
+  let bigBudget = false;    // 首帧允许不限量生成 sprite
+
+  function addWisps(blobs, rng){
+    const R = rng || Math.random;
+    const wn = 2 + Math.floor(R()*3);
+    for(let k=0;k<wn;k++){
+      const b = blobs[Math.floor(R()*blobs.length)];
+      const len = b.rx * (1.2 + R()*1.8);
+      blobs.push({ dx: b.dx + (R()<0.5?-1:1)*len*0.5, dy: b.dy - b.ry*(0.1 + R()*0.5), rx: len*0.5, ry: Math.max(3, b.ry*0.12), p: blobNoise(rng), fringe:1 });
+    }
+  }
+
+  function spawnCloud(cfg, top, bot, baseAlpha, vxBase, pad, i, n, instant){
+    const seq = ++cloudSeq;
+    const sSeed = seedFrom(seq);                       // 形状/纹理种子：同一朵云重建输出恒定
+    const wSeed  = (sSeed ^ 0x9E3779B9) >>> 0;
+    const tSeed  = (sSeed ^ 0x85EBCA6B) >>> 0;
+    const layer = Math.random() < 0.26 ? 0 : (Math.random() < 0.58 ? 1 : 2);
+    const style = (layer === 0 && Math.random() < 0.55) ? 'cirrus' : cfg.styles[Math.floor(Math.random() * cfg.styles.length)];
+    const layerScale = layer === 0 ? 0.60 : (layer === 1 ? 0.95 : 1.30);
+    const R = Math.max(80, Math.min(W, H) * 0.18) * layerScale * (0.8 + Math.random()*0.5);
+    const blobs = makeCloudShape(style, R, mulberry32(sSeed));
+    if(layer === 0) addWisps(blobs, mulberry32(wSeed));
+    const bounds = cloudBounds(blobs);
+    const layerK = layer === 0 ? 0.40 : (layer === 1 ? 0.75 : 1.0);
+    const vK = 0.7 + Math.random()*0.6;
+    const aK = layerK * (0.85 + Math.random()*0.3);
+    return {
+      seq: seq,
+      // 新均匀铺满屏幕（含少量抖动）；配合出生渐变，屏内出现不突兀
+      x: -pad + ((i + 0.5) / Math.max(n, 1)) * (W + pad * 2)
+         + (Math.random() - 0.5) * (W / Math.max(n, 6)),
+      y: (0.02 + Math.random() * 0.66) * H,
+      vx: vxBase * (layer === 0 ? 3 : (layer === 1 ? 7 : 12)) * vK,
+      vK, aK,
+      alpha: Math.min(1, baseAlpha * aK),
+      blobs, bounds, R, layer, style,
+      shapeSeed: sSeed, wispSeed: wSeed, texSeed: tSeed,
+      colorTop: top, colorBot: bot,
+      sprite: null, spriteDir: NaN,
+      fade: null, fadeT: -1,                 // -1 = 已武装旧 sprite，等新 sprite 就绪后开始淡变
+      pA: instant ? 1 : -(0.05 + Math.random()*0.8),  // 存在度：负值 = 出生延迟（错开淡入）
+      pT: 1
+    };
+  }
+
+  function retargetClouds(cfg, pal, instant){
+    // 窗口尺寸变化：旧云坐标按新旧比例缩放，位置完全连续
+    if(vw && vh && (vw !== W || vh !== H)){
+      const sx = W / vw, sy = H / vh;
+      for(const c of clouds){ c.x *= sx; c.y *= sy; c.vx *= sx; }
+    }
+    vw = W; vh = H;
+    if(instant) bigBudget = true;
+
+    const pad = Math.max(135, W * 0.12);
     const dark = [42, 46, 58];
     const top = mixColor(pal.cloudTop, dark, cfg.darken * 0.75);
     const bot = mixColor(pal.cloudBot, dark, cfg.darken);
+    const baseAlpha = Math.min(1, cfg.alpha * fxPrefs.cloudOpacity);
+    const vxBase = cfg.speed * fxPrefs.cloudSpeed;
 
-    for(let i=0;i<n;i++){
-      const layer = Math.random() < 0.26 ? 0 : (Math.random() < 0.58 ? 1 : 2);
-      const style = (layer === 0 && Math.random() < 0.55) ? 'cirrus' : cfg.styles[Math.floor(Math.random() * cfg.styles.length)];
-      const layerScale = layer === 0 ? 0.60 : (layer === 1 ? 0.95 : 1.30);
-      const R = Math.max(80, Math.min(W, H) * 0.18) * layerScale * (0.8 + Math.random()*0.5);
-      const blobs = makeCloudShape(style, R);
-      if(layer === 0){
-        const wn = 2 + Math.floor(Math.random()*3);
-        for(let k=0;k<wn;k++){
-          const b = blobs[Math.floor(Math.random()*blobs.length)];
-          const len = b.rx * (1.2 + Math.random()*1.8);
-          blobs.push({ dx: b.dx + (Math.random()<0.5?-1:1)*len*0.5, dy: b.dy - b.ry*(0.1 + Math.random()*0.5), rx: len*0.5, ry: Math.max(3, b.ry*0.12), p: blobNoise(), fringe:1 });
+    // 云量目标只由“天气类型 + 密度滑杆”决定，取中值保证同一模式重复进入数量稳定
+    const density = fxPrefs.showClouds ? Math.pow(fxPrefs.cloudDensity, 1.3) : 0;
+    const n = Math.min(72, Math.round(((cfg.count[0] + cfg.count[1]) / 2) * density));
+
+    // 外观指纹：任一变化（时段/天气暗度/样式集/透明度滑杆）才触发存量云换外观
+    const key = phase + '|' + cfg.alpha + '|' + cfg.darken + '|' + cfg.styles.join(',') + '|' + fxPrefs.cloudOpacity;
+    const restyle = key !== appKey;
+    appKey = key;
+
+    // 差分：按出生序号决定去留——前 n 朵保留，其余淡出
+    const bySeq = clouds.slice().sort((a,b) => a.seq - b.seq);
+    const keep = new Set();
+    for(let i=0;i<bySeq.length && i<n;i++) keep.add(bySeq[i]);
+
+    for(const c of clouds){
+      if(!keep.has(c)){ c.pT = 0; continue; }   // 多余的云：淡出后由 stepClouds 回收
+      c.pT = 1;
+      const needNewStyle = cfg.styles.indexOf(c.style) < 0;
+      if(restyle || needNewStyle){
+        if(needNewStyle){
+          const ns = cfg.styles[Math.floor(Math.random() * cfg.styles.length)];
+          c.blobs = makeCloudShape(ns, c.R, mulberry32(c.shapeSeed));
+          if(c.layer === 0) addWisps(c.blobs, mulberry32(c.wispSeed));
+          c.bounds = cloudBounds(c.blobs);
+          c.style = ns;
         }
+        c.colorTop = top; c.colorBot = bot;
+        c.alpha = Math.min(1, baseAlpha * c.aK);
+        if(c.sprite){
+          // 旧外观转成交叉淡变层，新 sprite 就绪后开始此消彼长
+          c.fade = { canvas: c.sprite.canvas, ox: c.sprite.ox, oy: c.sprite.oy };
+          c.fadeT = -1;
+        }
+        c.sprite = null; c.spriteDir = NaN;
       }
-      const bounds = cloudBounds(blobs);
+      c.vx = vxBase * (c.layer === 0 ? 3 : (c.layer === 1 ? 7 : 12)) * c.vK;
+    }
 
-      clouds.push({
-        // 均匀铺满屏幕（含少量抖动），密度调高时屏幕内立即多出云
-        x: -spawnPad + ((i + 0.5) / Math.max(n, 1)) * (W + spawnPad * 2)
-           + (Math.random() - 0.5) * (W / Math.max(n, 6)),
-        y: (0.02 + Math.random() * 0.66) * H,
-        vx: cfg.speed * fxPrefs.cloudSpeed * (layer === 0 ? 3 : (layer === 1 ? 7 : 12)) * (0.7 + Math.random()*0.6),
-        alpha: Math.min(1, cfg.alpha * fxPrefs.cloudOpacity) * (layer === 0 ? 0.40 : (layer === 1 ? 0.75 : 1.0)) * (0.85 + Math.random()*0.3),
-        blobs, bounds, layer, style,
-        colorTop: top, colorBot: bot
-      });
+    // 不足的数量 → 出生（淡入，位置按序均匀铺开）
+    for(let i = bySeq.length; i < n; i++){
+      clouds.push(spawnCloud(cfg, top, bot, baseAlpha, vxBase, pad, i, n, instant));
     }
     clouds.sort((a,b) => a.layer - b.layer);
   }
@@ -869,12 +1061,14 @@ const WeatherFX = (function(){
     };
   }
 
-  function rainSet(k, base){
-    if(!fxPrefs.showParticles || !fxPrefs.showRain) return;
-    const n = Math.round(base * scale() * fxPrefs.particleDensity * fxPrefs.rainDensity);
-    const sp = fxPrefs.rainSpeed;
+  /* ================================================================
+     粒子差分续接：设定目标数量，现有的保留，多余的淡出/坠落，
+     不足的补生（非雨滴类从透明淡入）。切换天气时不再瞬清瞬现。
+     ================================================================ */
+  function rainAdd(k, n){
     for(let i=0;i<n;i++){
       const d = rnd(0.45, 1);
+      const sp = fxPrefs.rainSpeed;
       particles.push({
         type:'rain',
         x: rnd(-60, W+60),
@@ -882,14 +1076,13 @@ const WeatherFX = (function(){
         vy: rnd(560, 880) * k * d * sp,
         vx: rnd(28, 72) * k * sp,
         len: rnd(11, 26) * k * d,
-        lv: d > 0.78 ? 2 : (d > 0.6 ? 1 : 0)
+        lv: d > 0.78 ? 2 : (d > 0.6 ? 1 : 0),
+        life: 1
       });
     }
   }
 
-  function snowSet(){
-    if(!fxPrefs.showParticles || !fxPrefs.showSnow) return;
-    const n = Math.round(60 * scale() * fxPrefs.particleDensity * fxPrefs.snowDensity);
+  function snowAdd(n){
     const sp = fxPrefs.snowSpeed;
     for(let i=0;i<n;i++){
       particles.push({
@@ -900,16 +1093,16 @@ const WeatherFX = (function(){
         vx: rnd(-14, 14) * sp,
         sway: rnd(0.6, 1.8),
         phase: rnd(0, Math.PI*2),
-        a: rnd(0.35, 0.85)
+        a: rnd(0.35, 0.85),
+        life: 0          // 出生淡入
       });
     }
   }
 
-  function fogSet(m){
-    if(!fxPrefs.showParticles) return;
+  function fogAdd(m, n){
     const pal = TIME_PAL[phase];
     const c = (m === 'haze' ? [206,188,148] : pal.fog).join(',');
-    for(let i=0;i<7;i++){
+    for(let i=0;i<n;i++){
       particles.push({
         type:'fog',
         x: rnd(-0.1, 1) * W,
@@ -917,14 +1110,13 @@ const WeatherFX = (function(){
         r: rnd(200, Math.max(280, W*0.45)),
         vx: rnd(5, 16) * (Math.random() < 0.5 ? -1 : 1),
         a: rnd(0.028, 0.07),
-        rgb: c
+        rgb: c,
+        life: 0
       });
     }
   }
 
-  function dustSet(){
-    if(!fxPrefs.showParticles) return;
-    const n = Math.round(90 * scale() * fxPrefs.particleDensity);
+  function dustAdd(n){
     for(let i=0;i<n;i++){
       particles.push({
         type:'dust',
@@ -932,14 +1124,13 @@ const WeatherFX = (function(){
         r: rnd(0.7, 2.1),
         vx: rnd(8, 38),
         vy: rnd(-6, 12),
-        a: rnd(0.10, 0.30)
+        a: rnd(0.10, 0.30),
+        life: 0
       });
     }
   }
 
-  function sunSet(){
-    if(!fxPrefs.showParticles) return;
-    const n = Math.round(20 * scale() * fxPrefs.particleDensity);
+  function moteAdd(n){
     for(let i=0;i<n;i++){
       particles.push({
         type:'mote',
@@ -947,15 +1138,13 @@ const WeatherFX = (function(){
         r: rnd(0.8, 2.2),
         vx: rnd(-9, 9),
         vy: rnd(-12, 3),
-        phase: rnd(0, Math.PI*2)
+        phase: rnd(0, Math.PI*2),
+        life: 0
       });
     }
   }
 
-  // mult: 星空密度系数（晴 1.0 / 多云 0.62 / 阴 0.30）
-  function starSet(mult){
-    if(!fxPrefs.showParticles) return;
-    const n = Math.round(75 * scale() * fxPrefs.particleDensity * (mult == null ? 1 : mult));
+  function starAdd(n){
     for(let i=0;i<n;i++){
       particles.push({
         type:'star',
@@ -963,47 +1152,87 @@ const WeatherFX = (function(){
         y: rnd(0, H*0.85),
         r: rnd(0.6, 1.7),
         phase: rnd(0, Math.PI*2),
-        speed: rnd(0.5, 1.6)
+        speed: rnd(0.5, 1.6),
+        life: 0
       });
     }
   }
 
-  function build(m){
-    const cfg = CLOUD_CFG[m] || CLOUD_CFG.cloudy;
-    const pal = TIME_PAL[phase];
+  // 各天气的目标粒子种类与数量（与旧 build() 的分支一一对应）
+  function particleTargets(m){
+    const t = {};
+    if(!fxPrefs.showParticles) return t;
+    const s = scale(), pd = fxPrefs.particleDensity;
+    if(m === 'light-rain' || m === 'moderate-rain' || m === 'heavy-rain' || m === 'storm'){
+      if(fxPrefs.showRain){
+        if(m === 'light-rain')         t.rain = { k:0.55, n: Math.round(45  * s * pd * fxPrefs.rainDensity) };
+        else if(m === 'moderate-rain') t.rain = { k:0.9,  n: Math.round(85  * s * pd * fxPrefs.rainDensity) };
+        else if(m === 'heavy-rain')    t.rain = { k:1.35, n: Math.round(140 * s * pd * fxPrefs.rainDensity) };
+        else                           t.rain = { k:1.3,  n: Math.round(135 * s * pd * fxPrefs.rainDensity) };
+      }
+    }
+    else if(m === 'snow' && fxPrefs.showSnow) t.snow = Math.round(60 * s * pd * fxPrefs.snowDensity);
+    else if(m === 'fog' || m === 'haze') t.fog = { m: m, n: 7 };
+    else if(m === 'dust')          t.dust = Math.round(90 * s * pd);
+    else if(m === 'clear')         t.mote = Math.round(20 * s * pd);
+    // 夜间星空：晴（1.0）/ 多云（0.62）/ 阴（0.30）/ 雾（0.08）
+    let sm = 0;
+    if(m === 'clear-night') sm = 1;
+    else if(phase === 'night'){
+      if(m === 'partly') sm = 0.62;
+      else if(m === 'cloudy') sm = 0.30;
+      else if(m === 'fog' || m === 'haze') sm = 0.08;
+    }
+    if(sm > 0) t.star = Math.round(75 * s * pd * sm);
+    return t;
+  }
 
-    particles = [];
-    flash = 0;
-    bolt = null;
-    clock = 0;
-
-    calcSun();
-    buildClouds(cfg, pal);
-
-    if(m === 'light-rain')         rainSet(0.55, 45);
-    else if(m === 'moderate-rain') rainSet(0.9, 85);
-    else if(m === 'heavy-rain')    rainSet(1.35, 140);
-    else if(m === 'storm'){ rainSet(1.3, 135); nextFlash = rnd(1.2, 3.5); }
-    else if(m === 'snow')          snowSet();
-    else if(m === 'fog' || m === 'haze') fogSet(m);
-    else if(m === 'dust')          dustSet();
-    else if(m === 'clear')         sunSet();
-    else if(m === 'clear-night')   starSet(1);
-
-    // 夜间多云/阴天也保留部分星空：阴（0.30）< 多云（0.62）< 晴（1.0）
-    if(m !== 'clear-night' && phase === 'night'){
-      if(m === 'partly')                 starSet(0.62);
-      else if(m === 'cloudy')            starSet(0.30);
-      else if(m === 'fog' || m === 'haze') starSet(0.08);
+  function retargetParticles(m){
+    const t = particleTargets(m);
+    // 不再需要的类别 → 整体淡出/坠落，不再瞬消
+    for(const p of particles){
+      if(!p.dying && !(p.type in t)) p.dying = true;
+    }
+    // 数量差 → 淘汰多余的（从新的开始），补足不足的
+    for(const type in t){
+      const want = (t[type].n != null) ? t[type].n : t[type];
+      const list = [];
+      for(const p of particles){ if(p.type === type && !p.dying) list.push(p); }
+      if(list.length > want){
+        for(let i = list.length - 1; i >= want; i--) list[i].dying = true;
+      } else if(list.length < want){
+        const need = want - list.length;
+        if(type === 'rain')      rainAdd(t.rain.k, need);
+        else if(type === 'snow') snowAdd(need);
+        else if(type === 'fog')  fogAdd(t.fog.m, need);
+        else if(type === 'dust') dustAdd(need);
+        else if(type === 'mote') moteAdd(need);
+        else if(type === 'star') starAdd(need);
+        // 新出生的非雨粒子从透明淡入（雨从天上落，天然无感）
+        for(let i = particles.length - need; i < particles.length; i++){
+          if(particles[i] && particles[i].type !== 'rain' && particles[i].life == null) particles[i].life = 0;
+        }
+      }
     }
   }
 
   function stepParticles(dt){
-    for(const p of particles){
+    for(let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      const lf = p.life == null ? 1 : p.life;
+      if(p.dying){
+        p.life = lf - dt * 1.8;
+        if(p.life <= 0.01){ particles.splice(i,1); continue; }
+      } else if(lf < 1){
+        p.life = Math.min(1, lf + dt * 1.8);
+      }
       if(p.type === 'rain'){
         p.y += p.vy * dt;
         p.x += p.vx * dt;
-        if(p.y - p.len > H){ p.y = -p.len - rnd(0, H*0.35); p.x = rnd(-60, W+60); }
+        if(p.y - p.len > H){
+          if(p.dying){ p.life = 0; }          // 停雨：落到屏幕底自然消失，不再回顶
+          else { p.y = -p.len - rnd(0, H*0.35); p.x = rnd(-60, W+60); }
+        }
         if(p.x > W + 100) p.x -= W + 200;
       } else if(p.type === 'snow'){
         p.phase += p.sway * dt;
@@ -1034,49 +1263,77 @@ const WeatherFX = (function(){
   }
 
   function stepClouds(dt){
-    for(const c of clouds){
+    const up = dt / 0.9, down = dt / 0.7;
+    for(let i=clouds.length-1;i>=0;i--){
+      const c = clouds[i];
       c.x += c.vx * dt;
       // 回收边距 200 -> 180：稳态下更多云留在屏幕内，而不是在屏幕外排队
       if(c.x + c.bounds.minX > W + 180){
         c.x = -180 - c.bounds.maxX;
       }
+      if(c.fadeT >= 0 && c.fadeT < 1) c.fadeT = Math.min(1, c.fadeT + dt / 0.9);
+      if(c.pA !== c.pT){
+        c.pA = (c.pA < c.pT) ? Math.min(c.pT, c.pA + up) : Math.max(c.pT, c.pA - down);
+        if(c.pT === 0 && c.pA <= 0.002){ clouds.splice(i,1); continue; }  // 死亡渐变走完才移除
+      }
     }
   }
 
-  // 光晕只随太阳/月亮位置变化，缓存成离屏 sprite，避免每帧重建径向渐变
-  let glowSprite = null, glowKey = '';
-  function drawGlow(){
-    if(!sun || sun.intensity <= 0.01) return;
-    const {x, y, color, radius, intensity, isMoon} = sun;
-    const key = (x|0)+','+(y|0)+','+(radius|0)+','+intensity.toFixed(3)+','+color.join(',')+','+(isMoon?1:0);
+  // 光晕只随太阳/月亮位置变化，缓存成离屏 sprite，避免每帧重建径向渐变；
+  // 时段切换时旧光晕与新光晕交叉淡变，避免天空中光斑瞬跳
+  let glowSprite = null, glowKey = '', glowPos = null;
+  let glowOld = null, glowOldT = 1;
+  function drawGlow(dt){
+    if(sun && sun.intensity > 0.01){
+      const {x, y, color, radius, intensity, isMoon} = sun;
+      const key = (x|0)+','+(y|0)+','+(radius|0)+','+intensity.toFixed(3)+','+color.join(',')+','+(isMoon?1:0);
 
-    if(!glowSprite || glowKey !== key){
-      const r = Math.max(2, Math.ceil(radius));
-      const s = document.createElement('canvas');
-      s.width = s.height = r*2;
-      const g2 = s.getContext('2d');
-      if(!g2) return;
-      const g = g2.createRadialGradient(r, r, 0, r, r, radius);
-      g.addColorStop(0,   rgba(color, intensity));
-      g.addColorStop(0.3, rgba(color, intensity*0.45));
-      g.addColorStop(0.7, rgba(color, intensity*0.12));
-      g.addColorStop(1,   rgba(color, 0));
-      g2.fillStyle = g;
-      g2.fillRect(0, 0, r*2, r*2);
-      if(intensity > 0.08){
-        const coreR = isMoon ? 24 : 36;
-        const cg = g2.createRadialGradient(r, r, 0, r, r, coreR);
-        cg.addColorStop(0,   rgba(mixColor(color, [255,255,255], 0.55), Math.min(1, intensity*1.8)));
-        cg.addColorStop(0.55, rgba(color, Math.min(1, intensity*1.3)));
-        cg.addColorStop(1,   rgba(color, 0));
-        g2.fillStyle = cg;
-        g2.beginPath();
-        g2.arc(r, r, coreR, 0, Math.PI*2);
-        g2.fill();
+      if(!glowSprite || glowKey !== key){
+        if(glowSprite && glowPos){
+          glowOld = { sprite: glowSprite, x: glowPos.x, y: glowPos.y, radius: glowPos.radius };
+          glowOldT = 0;
+        }
+        const r = Math.max(2, Math.ceil(radius));
+        const s = document.createElement('canvas');
+        s.width = s.height = r*2;
+        const g2 = s.getContext('2d');
+        if(!g2) return;
+        const g = g2.createRadialGradient(r, r, 0, r, r, radius);
+        g.addColorStop(0,   rgba(color, intensity));
+        g.addColorStop(0.3, rgba(color, intensity*0.45));
+        g.addColorStop(0.7, rgba(color, intensity*0.12));
+        g.addColorStop(1,   rgba(color, 0));
+        g2.fillStyle = g;
+        g2.fillRect(0, 0, r*2, r*2);
+        if(intensity > 0.08){
+          const coreR = isMoon ? 24 : 36;
+          const cg = g2.createRadialGradient(r, r, 0, r, r, coreR);
+          cg.addColorStop(0,   rgba(mixColor(color, [255,255,255], 0.55), Math.min(1, intensity*1.8)));
+          cg.addColorStop(0.55, rgba(color, Math.min(1, intensity*1.3)));
+          cg.addColorStop(1,   rgba(color, 0));
+          g2.fillStyle = cg;
+          g2.beginPath();
+          g2.arc(r, r, coreR, 0, Math.PI*2);
+          g2.fill();
+        }
+        glowSprite = s; glowKey = key; glowPos = { x: x, y: y, radius: radius };
       }
-      glowSprite = s; glowKey = key;
     }
-    ctx.drawImage(glowSprite, x - radius, y - radius);
+    // 旧光晕淡出 + 新光晕淡入（对偶）：总量近似守恒，避免两团高光叠加瞬提亮
+    if(glowOld){
+      glowOldT += dt;
+      if(glowOldT >= 1 || !glowOld.sprite){ glowOld = null; }
+      else {
+        ctx.globalAlpha = 1 - glowOldT;
+        ctx.drawImage(glowOld.sprite, glowOld.x - glowOld.radius, glowOld.y - glowOld.radius);
+        ctx.globalAlpha = 1;
+      }
+    }
+    if(sun && sun.intensity > 0.01 && glowSprite && glowKey){
+      ctx.globalAlpha = glowOld && glowOldT < 1 ? glowOldT : 1;
+      ctx.drawImage(glowSprite, sun.x - sun.radius, sun.y - sun.radius);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function renderCloudSprite(c, dirX){
@@ -1089,7 +1346,10 @@ const WeatherFX = (function(){
     const g2 = cv2.getContext('2d');
     if(!g2) return null;
 
-    const rr = (a,b) => a + Math.random()*(b-a);
+    // 纹理种子源：同一朵云每次重建输出相同的纹理细节（条纹/撕丝/裂缝），
+    // 重铺前后 sprite 完全重合，交叉淡变零残影
+    const TE = mulberry32(c.texSeed == null ? 1 : c.texSeed);
+    const rr = (a,b) => a + TE()*(b-a);
     const spanY = Math.max(1, bd.maxY - bd.minY);
     const spanX = Math.max(1, bd.maxX - bd.minX);
     const main = sc.filter(b=>!b.fringe);
@@ -1173,19 +1433,19 @@ const WeatherFX = (function(){
 
     // 5) internal streak / layer texture
     for(let i=0;i<34;i++){
-      const bx = bd.minX + Math.random()*spanX;
-      const by = bd.minY + Math.random()*spanY;
-      const stre = 4 + Math.random()*14;
+      const bx = bd.minX + TE()*spanX;
+      const by = bd.minY + TE()*spanY;
+      const stre = 4 + TE()*14;
       const hg = g2.createRadialGradient(bx,by,0,bx,by,stre*1.1);
-      const t = Math.random();
+      const t = TE();
       const col = t < 0.45 ? mixColor(c.colorTop,[255,255,255],0.35)
                : t < 0.8 ? mixColor(c.colorTop,c.colorBot,0.4)
                          : mixColor(c.colorBot,[10,12,24],0.5);
-      hg.addColorStop(0,  rgba(col, c.alpha*(0.05+Math.random()*0.06)));
-      hg.addColorStop(0.5,rgba(col, c.alpha*(0.02+Math.random()*0.04)));
+      hg.addColorStop(0,  rgba(col, c.alpha*(0.05+TE()*0.06)));
+      hg.addColorStop(0.5,rgba(col, c.alpha*(0.02+TE()*0.04)));
       hg.addColorStop(1,  rgba(col,0));
       g2.fillStyle = hg;
-      g2.beginPath(); g2.ellipse(bx,by,stre*1.6,stre*0.55,(Math.random()*Math.PI),0,Math.PI*2); g2.fill();
+      g2.beginPath(); g2.ellipse(bx,by,stre*1.6,stre*0.55,(TE()*Math.PI),0,Math.PI*2); g2.fill();
     }
 
     // 6) fibrous torn strands along the sunlit top edge
@@ -1193,7 +1453,7 @@ const WeatherFX = (function(){
     g2.lineCap = 'round';
     for(const b of useMain){
       if(b.dy > bd.minY + spanY*0.62) continue;
-      const k = 2 + (Math.random()*3|0);
+      const k = 2 + (TE()*3|0);
       for(let i=0;i<k;i++){
         const sx = b.dx + rr(-0.45,0.45)*b.rx;
         const sy = b.dy - b.ry*rr(0.5,0.9);
@@ -1253,18 +1513,42 @@ const WeatherFX = (function(){
   function drawClouds(){
     if(!sun || !fxPrefs.showClouds) return;
 
+    // sprite 预算：每帧最多新建 3 个，把切换瞬间的重铺开销摊到 ~0.5s 内，
+    // 避免「重建全屏云 sprite」导致切换首帧掉成顿闪。首帧不限量。
+    let budget = bigBudget ? 9999 : 3;
+    bigBudget = false;
+
     for(const c of clouds){
+      if(c.pA <= 0.002) continue;   // 出生未显形 / 死亡已亡：不画
       const bd = c.bounds;
       const boxL = c.x + bd.minX, boxR = c.x + bd.maxX;
       if(boxR < -240 || boxL > W + 240) continue;
 
       const dirX = Math.sign(sun.x - c.x) || 0;
-      if(!c.sprite || c.spriteDir !== dirX){
+      if((!c.sprite || c.spriteDir !== dirX) && budget > 0){
         c.sprite = renderCloudSprite(c, dirX);
         c.spriteDir = dirX;
+        budget--;
+        if(c.fade && c.fadeT < 0) c.fadeT = 0;   // 新外观就绪，交叉淡变开始
+      }
+      // 交叉淡变：旧外观在新外观就绪后此消彼长；未就绪前旧画面原样顶住（不闪空）
+      if(c.fade){
+        if(c.fadeT >= 1){ c.fade = null; }
+        else if(c.fadeT >= 0 && c.sprite){
+          ctx.globalAlpha = c.pA * (1 - c.fadeT);
+          ctx.drawImage(c.fade.canvas, c.x + c.fade.ox, c.y + c.fade.oy);
+          ctx.globalAlpha = 1;
+        } else if(!c.sprite){
+          ctx.globalAlpha = c.pA;
+          ctx.drawImage(c.fade.canvas, c.x + c.fade.ox, c.y + c.fade.oy);
+          ctx.globalAlpha = 1;
+        }
       }
       if(c.sprite){
+        const k = (c.fade && c.fadeT >= 0) ? Math.max(0, c.fadeT) : 1;
+        ctx.globalAlpha = c.pA * k;
         ctx.drawImage(c.sprite.canvas, c.x + c.sprite.ox, c.y + c.sprite.oy);
+        ctx.globalAlpha = 1;
       }
     }
   }
@@ -1291,32 +1575,37 @@ const WeatherFX = (function(){
     }
 
     for(const p of particles){
+      const lf = p.life == null ? 1 : p.life;
       if(p.type === 'snow'){
+        if(lf <= 0.01) continue;
         ctx.fillStyle = rgba(pal.snow, 1);
-        ctx.globalAlpha = p.a;
+        ctx.globalAlpha = p.a * lf;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, 6.2832);
         ctx.fill();
         ctx.globalAlpha = 1;
       } else if(p.type === 'fog'){
+        if(lf <= 0.01) continue;
         const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
-        g.addColorStop(0,    `rgba(${p.rgb},${p.a})`);
-        g.addColorStop(0.55, `rgba(${p.rgb},${p.a*0.55})`);
+        g.addColorStop(0,    `rgba(${p.rgb},${p.a*lf})`);
+        g.addColorStop(0.55, `rgba(${p.rgb},${p.a*lf*0.55})`);
         g.addColorStop(1,    `rgba(${p.rgb},0)`);
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, 6.2832);
         ctx.fill();
       } else if(p.type === 'dust'){
+        if(lf <= 0.01) continue;
         ctx.fillStyle = rgba(pal.dust, 1);
-        ctx.globalAlpha = p.a;
+        ctx.globalAlpha = p.a * lf;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, 6.2832);
         ctx.fill();
         ctx.globalAlpha = 1;
       } else if(p.type === 'mote'){
+        if(lf <= 0.01) continue;
         ctx.fillStyle = rgba(pal.mote, 1);
-        ctx.globalAlpha = 0.10 + 0.15 * (0.5 + 0.5*Math.sin(clock*1.1 + p.phase));
+        ctx.globalAlpha = (0.10 + 0.15 * (0.5 + 0.5*Math.sin(clock*1.1 + p.phase))) * lf;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, 6.2832);
         ctx.fill();
@@ -1329,9 +1618,11 @@ const WeatherFX = (function(){
     let has = false;
     for(const p of particles){
       if(p.type !== 'star') continue;
+      const lf = p.life == null ? 1 : p.life;
+      if(lf <= 0.01) continue;
       if(!has){ ctx.fillStyle = '#ffffff'; has = true; }
       const tw = 0.5 + 0.5 * Math.sin(clock * p.speed + p.phase);
-      ctx.globalAlpha = 0.22 + tw * 0.62;
+      ctx.globalAlpha = (0.22 + tw * 0.62) * lf;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, 6.2832);
       ctx.fill();
@@ -1381,18 +1672,10 @@ const WeatherFX = (function(){
 
   const FRAME_MS = 1000/30;   // 30fps 上限：观感几乎无差别，耗电明显下降
   let lastPaint = 0;
-  function frame(t){
-    if(!running) return;
-    raf = requestAnimationFrame(frame);
-    if(t - lastPaint < FRAME_MS - 1.5) return;   // 丢弃多余帧，避免 60/120Hz 满负荷
-    const dt = lastPaint ? Math.min((t - lastPaint)/1000, 0.08) : 0.016;
-    lastPaint = t;
-    lastT = t;
-    clock += dt;
-
+  function paintFrame(dt){
     try{
       ctx.clearRect(0,0,W,H);
-      drawGlow();
+      drawGlow(dt);
       stepClouds(dt);
       drawStars();          // 星星画在云层后面，云缝里自然露出
       drawClouds();
@@ -1402,6 +1685,20 @@ const WeatherFX = (function(){
     }catch(err){
       if(window.console && console.warn) console.warn('WeatherFX frame error:', err);
     }
+  }
+  function frame(t){
+    if(!running) return;
+    // 保险：若切后台时 visibilitychange 事件丢失（部分 WebView 版本如此），
+    // 动画会在后台以 30fps 无限空转 —— 直接自停
+    if(document.hidden){ stop(); return; }
+    raf = requestAnimationFrame(frame);
+    if(t - lastPaint < FRAME_MS - 1.5) return;   // 丢弃多余帧，避免 60/120Hz 满负荷
+    const dt = lastPaint ? Math.min((t - lastPaint)/1000, 0.08) : 0.016;
+    lastPaint = t;
+    lastT = t;
+    clock += dt;
+
+    paintFrame(dt);
   }
 
   function start(){
@@ -1418,6 +1715,40 @@ const WeatherFX = (function(){
     raf = null;
   }
 
+  /* 软切变（整屏快照淡出）已废弃：
+     云层改为差分续接 + 逐云交叉淡变后，全屏快照只会造成双重曝光与二次跳变，
+     这正是「加了软切变还在闪」的根源。 */
+
+  /* 差分重建：不再清空 clouds/particles/clock，一切变化都是增删与渐变 */
+  function rebuild(m, instant){
+    const cfg = CLOUD_CFG[m] || CLOUD_CFG.cloudy;
+    calcSun();
+    retargetClouds(cfg, TIME_PAL[phase], instant);
+    retargetParticles(m);
+    if(m === 'storm'){
+      if(nextFlash <= 0) nextFlash = rnd(1.2, 3.5);
+    }else{
+      flash = 0;
+      bolt = null;
+    }
+  }
+
+  /* 开屏层散场：首 set() 完成（云层开始错落浮现）后调用。驻留 0s 再 1.5s 溶解，
+     开屏底色从容淡出；异常路径由 fxSplashAuto 5.5s 兜底 */
+  function fadeBootSplash(){
+    try{
+      var s = document.getElementById('fxSplash');
+      if(!s || s.dataset.out) return;
+      s.dataset.out = '1.5';
+      setTimeout(function(){
+        requestAnimationFrame(function(){
+          s.classList.add('out');
+          setTimeout(function(){ if(s.parentNode) s.parentNode.removeChild(s); }, 2000);
+        });
+      }, 0);
+    }catch(e){}
+  }
+
   function set(weatherKey){
     init();
     if(!cv) return;
@@ -1428,12 +1759,33 @@ const WeatherFX = (function(){
       return;
     }
 
+    const first = !mode;    // 首次进入：整屏即时成形
     mode  = weatherKey;
     phase = p;
-    build(mode);
-    cv.classList.add('on');
-    cv.style.opacity = String(fxPrefs.fxOpacity);
+    // 首屏云不 instant 全量点亮：走出生渐变（随机出生延迟错落淡入）
+    // 整片云层在 ~2s 内陆续显形，观感是"云渐渐出来"而不是一屏突冒
+    rebuild(mode);
+    if(bootInstant){
+      // 开屏首帧柔和渐显：原生已用上次天气的背景色铺底当开屏画面，
+      // 画布 1.0s 缓慢渐入，与云层错落出生叠加，观感从容
+      bootInstant = false;
+      cv.classList.add('on');
+      cv.style.transition = 'none';
+      cv.style.opacity = '0';
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          if(!cv) return;
+          cv.style.transition = 'opacity 1.0s ease';
+          cv.style.opacity = String(fxPrefs.fxOpacity);
+          setTimeout(function(){ if(cv) cv.style.transition = ''; }, 1500);
+        });
+      });
+    }else{
+      cv.classList.add('on');
+      cv.style.opacity = String(fxPrefs.fxOpacity);
+    }
     start();
+    if(first) fadeBootSplash();   // 开屏层：云层开始浮现后驻留→1.5s 溶解
   }
 
   let rebuildTimer = null;
@@ -1446,7 +1798,7 @@ const WeatherFX = (function(){
       if(rebuildTimer) clearTimeout(rebuildTimer);
       rebuildTimer = setTimeout(function(){
         rebuildTimer = null;
-        if(mode) build(mode);
+        rebuild(mode);     // 滑杆变化：云量增删走渐变，不再全屏重建
         if(!running) start();
       }, 60);
       if(!running) start();
@@ -1458,7 +1810,20 @@ const WeatherFX = (function(){
 
   function pause(){ stop(); }
   function resume(){ if(mode) start(); }
-  return { set, applyPrefs, getPrefs, getDefaults, pause, resume };
+  // 只读调试出口：核对切换时云差分续接（seq/x/y 保留、pA 渐变、淡变状态）
+  function debugState(){
+    return {
+      mode: mode, phase: phase,
+      clouds: clouds.map(function(c){
+        return { seq: c.seq, x: Math.round(c.x), y: Math.round(c.y),
+                 pA: +c.pA.toFixed(2), pT: c.pT, style: c.style,
+                 fadeT: c.fadeT == null ? null : +c.fadeT.toFixed(2),
+                 sprite: !!c.sprite, fade: !!c.fade };
+      }),
+      particles: particles.reduce(function(m,p){ m[p.type] = (m[p.type]||0)+1; return m; }, {})
+    };
+  }
+  return { set, applyPrefs, getPrefs, getDefaults, pause, resume, debugState };
 })();
 
 
@@ -1495,13 +1860,91 @@ function applyPanelAlpha(){
   }catch(e){}
 }
 
+/* ================================================================
+   主题转场幕布（视频式 dip）：
+   1. 幕布渐入盖住整个页面（旧景渐出）；
+   2. 全遮窗口期：换 dataset 主题 + CloudFX 差分重排 + 面板色跳 —— 全部被遮住；
+   3. 幕布逐渐退出，显出已经接好的新景；
+   4. 出画后云层自己的出生淡入/交叉淡变继续平滑衔接。
+   幕布背景由 --bg-a/b/c 变量驱动：盖幕期间 dataset 已换，撤幕时与底层
+   天幕完全同色，无缝不闪。支持连续调用合并。
+   ================================================================ */
+var fxVeil = null, veilBusy = false, veilPendingApply = null;
+function themeVeilTransition(applyFn){
+  try{
+    if(!veilBusy){
+      veilBusy = true;
+      if(!fxVeil){
+        fxVeil = document.createElement('div');
+        fxVeil.id = 'fxVeil';
+        fxVeil.setAttribute('aria-hidden','true');
+        document.body.appendChild(fxVeil);
+      }
+      fxVeil.style.display = 'block';      // 仅转场期间挂合成层，结束即卸（省电）
+      fxVeil.style.background = '';        // 跟随当前主题变量
+      fxVeil.style.transition = 'none';
+      fxVeil.style.opacity = '0';
+      // 渐入盖幕：旧景“渐出”进幕布
+      requestAnimationFrame(function(){
+        if(!fxVeil) return;
+        fxVeil.style.transition = 'opacity 0.22s ease';
+        fxVeil.style.opacity = '1';
+      });
+      // 0.22s 渐入 + 0.08s 保持 = 全遮窗口
+      setTimeout(function(){
+        try{ applyFn(); }catch(e){}
+        // 幕下已换景：幕布“渐出”，显出新景
+        requestAnimationFrame(function(){
+          if(!fxVeil) return;
+          fxVeil.style.transition = 'opacity 0.5s ease';
+          fxVeil.style.opacity = '0';
+        });
+        setTimeout(function(){
+          fxVeil.style.display = 'none';     // 转场完成：完全撤下合成层
+          veilBusy = false;
+          if(veilPendingApply){
+            var f = veilPendingApply; veilPendingApply = null;
+            themeVeilTransition(f);        // 转场期间的后续请求：补一次完整 dip
+          }
+        }, 560);
+      }, 300);
+    }else{
+      veilPendingApply = applyFn;          // 进行中：只保留最新目标
+    }
+  }catch(e){
+    veilBusy = false;
+    try{ applyFn(); }catch(e2){}
+  }
+}
+
 function applyWeatherTheme(skycon){
   const key = WEATHER_THEME[skycon] || 'cloudy';
-  if(document.body.dataset.weather !== key){
-    document.body.dataset.weather = key;
+  const firstTheme = !document.body.dataset.weather;
+  const reduceMotion = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  /* 幕布全部遮盖完成后才执行：主题落库 + 云层差分重排 + 面板色同步，
+     用户观感 = 旧景渐出 → 幕布里直接透出新景，中间一切跳变不可见 */
+  const applyAll = function(){
+    // 首次落主题不做渐变（配合原生开屏铺底，保证开屏即显）
+    if(firstTheme && document.body.classList) document.body.classList.add('theme-anim-off');
+    if(document.body.dataset.weather !== key){
+      document.body.dataset.weather = key;
+    }
+    if(firstTheme && document.body.classList){
+      setTimeout(function(){ document.body.classList.remove('theme-anim-off'); }, 80);
+    }
+    WeatherFX.set(key);
+    applyPanelAlpha();
+    // 主题已经落到 body 上，移除首帧铺底，后续切换只看 body
+    document.documentElement.removeAttribute('data-boot-weather');
+  };
+
+  // 同主题刷新/冷启动/减弱动态：不走 dip，直接应用（云层仍有差分渐变兜底）
+  if(!firstTheme && !reduceMotion && document.body && document.body.dataset.weather !== key){
+    themeVeilTransition(applyAll);
+  }else{
+    applyAll();
   }
-  WeatherFX.set(key);
-  applyPanelAlpha();
 }
 
 /* ================================================================
@@ -2043,8 +2486,14 @@ function readWeatherCache(){
 
 function saveWeatherCache(data){
   try{
+    // 把主题一起存下来，下次开屏首帧可以直接用缓存天气的配色
+    let theme = '';
+    try{
+      const rt = data && data.result && data.result.realtime;
+      theme = WEATHER_THEME[ds(rt && rt.skycon)] || 'cloudy';
+    }catch(e){}
     localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({
-      savedAt: Date.now(), location: LOCATION, place: PLACE_NAME, data
+      savedAt: Date.now(), location: LOCATION, place: PLACE_NAME, theme, data
     }));
   }catch(e){}
 }
@@ -2052,6 +2501,8 @@ function saveWeatherCache(data){
 function showCachedWeather(){
   const cache = readWeatherCache();
   if(!cache) return false;
+  // 位置已变化时不要用旧位置的天气充数，避免启动瞬间显示错误地点
+  if(LOCATION && cache.location && cache.location !== LOCATION) return false;
   try{ draw(cache.data); return true; }
   catch(e){ return false; }
 }
@@ -2081,7 +2532,9 @@ window.onNativeWeatherResult = function(jsonText){
 window.onNativeWeatherError = function(message){
   const waiters = nativeWeatherWaiters.splice(0);
   if(nativeWeatherTimer){ clearTimeout(nativeWeatherTimer); nativeWeatherTimer=null; }
-  if(hasVisibleWeather || readWeatherCache()){
+  // 只有真正显示了天气（缓存或新数据）时才静默失败；否则必须提示错误，
+  // 避免位置变化导致缓存不可用时页面一直停在骨架上。
+  if(hasVisibleWeather){
     waiters.forEach(resolve=>resolve(false));
     return;
   }
@@ -2164,6 +2617,20 @@ window.refreshWeather = async function(){
 
 window.pauseAutoRefresh = function(){};
 window.resumeAutoRefresh = function(){};
+
+/* 首屏同步渲染缓存：脚本执行时立即画出上次天气，避免启动瞬间闪出加载占位。
+   无缓存时才由下面的 load() 显示骨架 / 错误提示。 */
+try{
+  if(!hasVisibleWeather){
+    // 缓存还没画出来时，先把已知地点显示在顶部，避免顶栏空白
+    const locEl = document.getElementById('loc');
+    if(locEl && !locEl.textContent && PLACE_NAME && PLACE_NAME !== '未设置位置'){
+      locEl.textContent = PLACE_NAME;
+    }
+    hasVisibleWeather = showCachedWeather();
+  }
+}catch(e){}
+document.documentElement.classList.remove('wx-booting');
 
 if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', load); } else { load(); }
 </script>
