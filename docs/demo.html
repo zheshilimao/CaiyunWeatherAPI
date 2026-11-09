@@ -186,22 +186,35 @@
   window.__DEMO_SET    = function(i){ cur = i; window.__DEMO_HOUR = SCENES[i].hour; };
 
   window.NativeWeather = {
+    /* 演示数据同步返回，打开即渲染，不出现骨架/加载态 */
     requestWeather: function(){
-      setTimeout(function(){
-        if(window.onNativeWeatherResult){
-          window.onNativeWeatherResult(JSON.stringify(build(SCENES[cur])));
-        }
-      }, 120);
+      if(window.onNativeWeatherResult){
+        window.onNativeWeatherResult(JSON.stringify(build(SCENES[cur])));
+      }
       return true;
     },
     requestWeatherForce: function(){ return this.requestWeather(); }
   };
+
+  /* 预置首场景缓存：页面主脚本会在首帧同步渲染，打开不出现骨架 */
+  try{
+    localStorage.setItem('caiyun_weather_cache_v1', JSON.stringify({
+      savedAt: Date.now(),
+      location: '108.37,22.82',
+      place: '南宁市 良庆区',
+      data: build(SCENES[0])
+    }));
+  }catch(e){}
 })();
 </script>
 
 <title>彩云天气 · 完整页面演示</title>
 
 <script>
+  /* 首帧前隐藏正文：缓存渲染完成后再一次性显示，避免启动时闪出加载占位 */
+  document.documentElement.classList.add('wx-booting');
+  /* 兜底：主脚本异常时也要把页面显示出来 */
+  setTimeout(function(){ document.documentElement.classList.remove('wx-booting'); }, 2500);
   const NATIVE_CONFIG = window.AndroidConfig || null;
 
   let CAIYUN       = NATIVE_CONFIG ? NATIVE_CONFIG.getApiKey()     : '';
@@ -216,6 +229,40 @@
     LOCATION    = NATIVE_CONFIG.getLocation()  || '';
     PLACE_NAME  = NATIVE_CONFIG.getPlaceName() || '未设置位置';
   }
+
+  /* 开屏首帧：先从本地缓存取上次天气的主题铺底。
+     这样页面第一次绘制就是缓存的天气配色，而不是默认深蓝。 */
+  function bootThemeFromSkycon(s){
+    s = String(s || '').toUpperCase();
+    if(!s) return '';
+    if(/SNOW|SLEET/.test(s)) return 'snow';
+    if(/HAIL|STORM|THUNDER/.test(s)) return 'storm';
+    if(/RAIN/.test(s)){
+      if(/HEAVY/.test(s)) return 'heavy-rain';
+      if(/MODERATE/.test(s)) return 'moderate-rain';
+      return 'light-rain';
+    }
+    if(/HAZE/.test(s)) return 'haze';
+    if(/DUST|SAND/.test(s)) return 'dust';
+    if(/FOG/.test(s)) return 'fog';
+    if(/CLEAR_NIGHT/.test(s)) return 'clear-night';
+    if(/CLEAR/.test(s)) return 'clear';
+    if(/PARTLY/.test(s)) return 'partly';
+    return 'cloudy';
+  }
+  (function applyBootTheme(){
+    try{
+      var raw = localStorage.getItem('caiyun_weather_cache_v1');
+      if(!raw) return;
+      var item = JSON.parse(raw);
+      var key = item && item.theme;
+      if(!key){
+        var rt = item && item.data && item.data.result && item.data.result.realtime;
+        key = bootThemeFromSkycon(rt && rt.skycon);
+      }
+      if(key) document.documentElement.setAttribute('data-boot-weather', key);
+    }catch(e){}
+  })();
 
   if (NATIVE_CONFIG && NATIVE_CONFIG.getStatusBarInsetDp) {
     document.documentElement.style.setProperty('--status-inset', NATIVE_CONFIG.getStatusBarInsetDp() + 'px');
@@ -258,7 +305,7 @@
   --panel-shadow:0 6px 18px rgba(0,0,0,.13);
   --accent-bg:rgba(125,202,255,.15);
 }
-body[data-weather="clear"]{
+body[data-weather="clear"],html[data-boot-weather="clear"]{
   --bg-a:#4a9fd6; --bg-b:#1c6fa8; --bg-c:#073761;
   --tint-1:74,159,214; --tint-2:28,111,168; --tint-3:7,55,97; --tint-4:3,25,45;
   --panel-bg:rgba(20,76,126,.56);
@@ -266,7 +313,7 @@ body[data-weather="clear"]{
   --panel-shadow:0 6px 18px rgba(0,20,50,.16);
   --accent-bg:rgba(140,210,255,.18);
 }
-body[data-weather="clear-night"]{
+body[data-weather="clear-night"],html[data-boot-weather="clear-night"]{
   --bg-a:#3f6699; --bg-b:#17335c; --bg-c:#040a18;
   --tint-1:63,102,153; --tint-2:23,51,92; --tint-3:6,20,42; --tint-4:2,6,14;
   --panel-bg:rgba(12,36,70,.70);
@@ -274,7 +321,7 @@ body[data-weather="clear-night"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.28);
   --accent-bg:rgba(120,180,255,.13);
 }
-body[data-weather="partly"]{
+body[data-weather="partly"],html[data-boot-weather="partly"]{
   --bg-a:#6aa8cf; --bg-b:#31719d; --bg-c:#0d2c4a;
   --tint-1:106,168,207; --tint-2:49,113,157; --tint-3:13,44,74; --tint-4:5,17,30;
   --panel-bg:rgba(22,74,118,.58);
@@ -282,7 +329,7 @@ body[data-weather="partly"]{
   --panel-shadow:0 6px 18px rgba(0,20,45,.16);
   --accent-bg:rgba(130,205,255,.16);
 }
-body[data-weather="cloudy"]{
+body[data-weather="cloudy"],html[data-boot-weather="cloudy"]{
   --bg-a:#7e8e9d; --bg-b:#3c4f62; --bg-c:#111a24;
   --tint-1:126,142,157; --tint-2:60,79,98; --tint-3:17,26,36; --tint-4:6,10,15;
   --panel-bg:rgba(40,56,74,.62);
@@ -290,7 +337,7 @@ body[data-weather="cloudy"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.20);
   --accent-bg:rgba(190,215,240,.12);
 }
-body[data-weather="fog"]{
+body[data-weather="fog"],html[data-boot-weather="fog"]{
   --bg-a:#8493a1; --bg-b:#47565f; --bg-c:#1b232a;
   --tint-1:132,147,161; --tint-2:71,86,95; --tint-3:27,35,42; --tint-4:9,13,16;
   --panel-bg:rgba(50,62,74,.60);
@@ -298,7 +345,7 @@ body[data-weather="fog"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.18);
   --accent-bg:rgba(210,225,240,.14);
 }
-body[data-weather="light-rain"]{
+body[data-weather="light-rain"],html[data-boot-weather="light-rain"]{
   --bg-a:#6b93ac; --bg-b:#2d5c78; --bg-c:#0a1d30;
   --tint-1:107,147,172; --tint-2:45,92,120; --tint-3:10,29,48; --tint-4:4,10,18;
   --panel-bg:rgba(18,50,78,.62);
@@ -306,7 +353,7 @@ body[data-weather="light-rain"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.22);
   --accent-bg:rgba(130,200,255,.14);
 }
-body[data-weather="moderate-rain"]{
+body[data-weather="moderate-rain"],html[data-boot-weather="moderate-rain"]{
   --bg-a:#557f99; --bg-b:#24485f; --bg-c:#06141f;
   --tint-1:85,127,153; --tint-2:36,72,95; --tint-3:6,20,31; --tint-4:2,7,11;
   --panel-bg:rgba(14,40,62,.66);
@@ -314,7 +361,7 @@ body[data-weather="moderate-rain"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.26);
   --accent-bg:rgba(120,190,245,.13);
 }
-body[data-weather="heavy-rain"]{
+body[data-weather="heavy-rain"],html[data-boot-weather="heavy-rain"]{
   --bg-a:#41637d; --bg-b:#1a3549; --bg-c:#040b12;
   --tint-1:65,99,125; --tint-2:26,53,73; --tint-3:4,11,18; --tint-4:1,4,7;
   --panel-bg:rgba(10,30,48,.70);
@@ -322,7 +369,7 @@ body[data-weather="heavy-rain"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.30);
   --accent-bg:rgba(115,180,235,.12);
 }
-body[data-weather="storm"]{
+body[data-weather="storm"],html[data-boot-weather="storm"]{
   --bg-a:#5b5488; --bg-b:#262347; --bg-c:#08061a;
   --tint-1:91,84,136; --tint-2:38,35,71; --tint-3:8,6,26; --tint-4:3,2,10;
   --panel-bg:rgba(22,18,44,.72);
@@ -330,7 +377,7 @@ body[data-weather="storm"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.32);
   --accent-bg:rgba(150,160,235,.14);
 }
-body[data-weather="snow"]{
+body[data-weather="snow"],html[data-boot-weather="snow"]{
   --bg-a:#96b3c9; --bg-b:#54748e; --bg-c:#22303d;
   --tint-1:150,179,201; --tint-2:84,116,142; --tint-3:34,48,61; --tint-4:12,18,24;
   --panel-bg:rgba(48,66,84,.54);
@@ -338,7 +385,7 @@ body[data-weather="snow"]{
   --panel-shadow:0 6px 18px rgba(10,20,35,.14);
   --accent-bg:rgba(200,225,245,.18);
 }
-body[data-weather="haze"]{
+body[data-weather="haze"],html[data-boot-weather="haze"]{
   --bg-a:#a8977a; --bg-b:#5d5442; --bg-c:#241f18;
   --tint-1:168,151,122; --tint-2:93,84,66; --tint-3:36,31,24; --tint-4:13,11,8;
   --panel-bg:rgba(58,50,38,.62);
@@ -346,7 +393,7 @@ body[data-weather="haze"]{
   --panel-shadow:0 6px 18px rgba(0,0,0,.20);
   --accent-bg:rgba(235,215,175,.14);
 }
-body[data-weather="dust"]{
+body[data-weather="dust"],html[data-boot-weather="dust"]{
   --bg-a:#b09a70; --bg-b:#66543a; --bg-c:#241d12;
   --tint-1:176,154,112; --tint-2:102,84,58; --tint-3:36,29,18; --tint-4:13,10,6;
   --panel-bg:rgba(60,50,34,.64);
@@ -369,6 +416,23 @@ body{
   opacity:0;transition:opacity .9s ease;
 }
 #weatherFx.on{opacity:1}
+
+/* 开屏渐隐层：演示与 App 内一致的开屏方案（发布工程里由原生背板同色衔接）。
+   页面加载后首 set() 完成时驻留 0s → 1.0s 溶解进天气页面 */
+#fxSplash{
+  position:fixed; inset:0; z-index:898; pointer-events:none;
+  background:linear-gradient(135deg,#5a9bd0 0%,#22608e 55%,#0a2c4e 100%);
+}
+#fxSplash.out{
+  opacity:0; animation:none;
+  transition:opacity 1.5s ease-out;
+}
+/* 兜底：异常路径下也要保证开屏层最终淡出 */
+@keyframes fxSplashAuto{ to{ opacity:0; } }
+#fxSplash{ animation:fxSplashAuto 2s ease 5.5s forwards; }
+@media (prefers-reduced-motion: reduce){
+  #fxSplash{ animation-duration:.1s; }
+}
 
 .status-glass{
   position:fixed;top:0;left:0;right:0;
@@ -421,6 +485,23 @@ body{
   transition:background-color .6s ease, border-color .6s ease, box-shadow .6s ease;
 }
 .page{position:relative;z-index:1;max-width:1180px;margin:auto;padding:0 18px 8px}
+
+/* 启动门控：脚本同步渲染完缓存后移除 wx-booting，首帧直接是真实天气 */
+html.wx-booting .top,
+html.wx-booting .page{opacity:0}
+
+/* 首次启动（无缓存）时的轻量骨架；有缓存时脚本在首帧前就渲染真实内容，不会出现 */
+#app:empty::before,
+#app:empty::after{
+  content:'';display:block;border-radius:22px;
+  background:linear-gradient(100deg,rgba(255,255,255,.045) 30%,rgba(255,255,255,.10) 50%,rgba(255,255,255,.045) 70%);
+  background-size:220% 100%;
+  animation:wxSkeleton 1.5s ease-in-out infinite;
+}
+#app:empty::before{height:190px;margin:6px 0 12px}
+#app:empty::after{height:118px}
+@keyframes wxSkeleton{0%{background-position:160% 0}100%{background-position:-60% 0}}
+@media (prefers-reduced-motion: reduce){#app:empty::before,#app:empty::after{animation:none}}
 
 .hero{padding:30px 24px 26px;display:flex;flex-direction:column;align-items:center;text-align:center}
 .hero-temp{font-size:112px;font-weight:400;line-height:1;letter-spacing:-6px}
@@ -609,18 +690,19 @@ body{
 </style>
 </head>
 <body>
+<div id="fxSplash" aria-hidden="true"></div>
 <div class="status-glass"></div>
 
 <div class="top">
-  <div class="loc" id="loc">定位加载中…</div>
+  <div class="loc" id="loc"></div>
   <div class="top-right">
-    <div class="muted" id="upd">正在更新…</div>
+    <div class="muted" id="upd"></div>
     <button class="settings-btn" aria-label="设置" onclick="openWeatherSettings()">⚙</button>
   </div>
 </div>
 
 <main class="page">
-  <div id="app">加载中…</div>
+  <div id="app"></div>
 </main>
 
 <script>
@@ -757,6 +839,8 @@ const WeatherFX = (function(){
   let W = 0, H = 0, dpr = 1;
   let mode  = '';
   let phase = 'noon';
+  let bootInstant = true;   // 开屏首帧：画布 1.4s 渐显，与云层错落浮现同步
+  let bootSpawn = true;     // 开屏首次建云：云带随机出生延迟，错落浮现
   let particles = [];
   let clouds = [];
   let sun = null;
@@ -887,6 +971,7 @@ const WeatherFX = (function(){
       const p = getTimePhase();
       if(p !== phase){
         phase = p;
+        softSwap();        // 时段（调色板）切换也走软切变
         build(mode);
       }
     }, 60000);
@@ -896,7 +981,7 @@ const WeatherFX = (function(){
     if(!cv) return;
     W = window.innerWidth;
     H = window.innerHeight;
-    dpr = Math.min(window.devicePixelRatio || 1, 1.5);   // 降低像素填充率，省电
+    dpr = Math.min(window.devicePixelRatio || 1, 1.3);   // 1.5→1.3：云是柔和渐变，降填充率省电无感
     cv.width  = Math.max(1, Math.round(W*dpr));
     cv.height = Math.max(1, Math.round(H*dpr));
     cv.style.width  = W + 'px';
@@ -1024,7 +1109,7 @@ const WeatherFX = (function(){
     const density = fxPrefs.showClouds ? Math.pow(fxPrefs.cloudDensity, 1.3) : 0;
     const n = Math.min(72, Math.round((cMin + Math.random()*(cMax - cMin + 1)) * density));
     // 生成范围只在屏幕左右留少量缓冲，避免大量云停在屏幕外“慢慢飘进来”
-    const spawnPad = Math.max(90, W * 0.12);
+    const spawnPad = Math.max(150, W * 0.12);
     const dark = [42, 46, 58];
     const top = mixColor(pal.cloudTop, dark, cfg.darken * 0.75);
     const bot = mixColor(pal.cloudBot, dark, cfg.darken);
@@ -1053,7 +1138,10 @@ const WeatherFX = (function(){
         vx: cfg.speed * fxPrefs.cloudSpeed * (layer === 0 ? 3 : (layer === 1 ? 7 : 12)) * (0.7 + Math.random()*0.6),
         alpha: Math.min(1, cfg.alpha * fxPrefs.cloudOpacity) * (layer === 0 ? 0.40 : (layer === 1 ? 0.75 : 1.0)) * (0.85 + Math.random()*0.3),
         blobs, bounds, layer, style,
-        colorTop: top, colorBot: bot
+        colorTop: top, colorBot: bot,
+        // 开屏首次建云：随机出生延迟 + 存在度淡入，云错落浮现而非整体瞬现
+        pA: bootSpawn ? 0 : null,
+        bDelay: bootSpawn ? (0.05 + Math.random() * 0.55) : 0
       });
     }
     clouds.sort((a,b) => a.layer - b.layer);
@@ -1253,10 +1341,15 @@ const WeatherFX = (function(){
 
   function stepClouds(dt){
     for(const c of clouds){
+      // 出生延迟 → 之后存在度 0→1（约 1.1s 渐显）
+      if(c.pA != null){
+        if(c.bDelay > 0){ c.bDelay -= dt; }
+        else if(c.pA < 1){ c.pA = Math.min(1, c.pA + dt/1.1); }
+      }
       c.x += c.vx * dt;
-      // 回收边距 200 -> 110：稳态下更多云留在屏幕内，而不是在屏幕外排队
-      if(c.x + c.bounds.minX > W + 110){
-        c.x = -110 - c.bounds.maxX;
+      // 回收边距 200 -> 180：稳态下更多云留在屏幕内，而不是在屏幕外排队
+      if(c.x + c.bounds.minX > W + 180){
+        c.x = -180 - c.bounds.maxX;
       }
     }
   }
@@ -1475,6 +1568,8 @@ const WeatherFX = (function(){
       const bd = c.bounds;
       const boxL = c.x + bd.minX, boxR = c.x + bd.maxX;
       if(boxR < -240 || boxL > W + 240) continue;
+      // 出生延迟中的云不渲染也不生成 sprite
+      if(c.pA != null && c.pA <= 0) continue;
 
       const dirX = Math.sign(sun.x - c.x) || 0;
       if(!c.sprite || c.spriteDir !== dirX){
@@ -1482,7 +1577,13 @@ const WeatherFX = (function(){
         c.spriteDir = dirX;
       }
       if(c.sprite){
-        ctx.drawImage(c.sprite.canvas, c.x + c.sprite.ox, c.y + c.sprite.oy);
+        if(c.pA != null && c.pA < 1){
+          ctx.globalAlpha = c.pA;
+          ctx.drawImage(c.sprite.canvas, c.x + c.sprite.ox, c.y + c.sprite.oy);
+          ctx.globalAlpha = 1;
+        }else{
+          ctx.drawImage(c.sprite.canvas, c.x + c.sprite.ox, c.y + c.sprite.oy);
+        }
       }
     }
   }
@@ -1601,6 +1702,7 @@ const WeatherFX = (function(){
   let lastPaint = 0;
   function frame(t){
     if(!running) return;
+    if(document.hidden){ stop(); return; }   // 后台自停保险：visibilitychange 钩子失效时兜底
     raf = requestAnimationFrame(frame);
     if(t - lastPaint < FRAME_MS - 1.5) return;   // 丢弃多余帧，避免 60/120Hz 满负荷
     const dt = lastPaint ? Math.min((t - lastPaint)/1000, 0.08) : 0.016;
@@ -1636,6 +1738,48 @@ const WeatherFX = (function(){
     raf = null;
   }
 
+  /* 软切变：重建云层前把当前画面快照铺在上层淡出，
+     避免「旧云瞬间消失 + 新云随机位置瞬间出现」的突兀跳变。 */
+  let lastSnap = null, swapTimer = null;
+  function softSwap(){
+    if(!cv || !cv.classList.contains('on')) return;
+    try{
+      if(lastSnap){ lastSnap.remove(); lastSnap = null; }
+      const s = document.createElement('canvas');
+      s.width = cv.width; s.height = cv.height;
+      s.getContext('2d').drawImage(cv, 0, 0);
+      const cs = getComputedStyle(cv);
+      ['position','top','left','right','bottom','zIndex','width','height','pointerEvents','mixBlendMode'].forEach(function(k){
+        try{ if(cs[k]) s.style[k] = cs[k]; }catch(e){}
+      });
+      s.style.opacity = cs.opacity;
+      s.style.transition = 'opacity .8s ease';
+      cv.parentNode.insertBefore(s, cv.nextSibling);
+      lastSnap = s;
+      requestAnimationFrame(function(){ s.style.opacity = '0'; });
+      if(swapTimer) clearTimeout(swapTimer);
+      swapTimer = setTimeout(function(){
+        if(lastSnap === s){ s.remove(); lastSnap = null; swapTimer = null; }
+      }, 1000);
+    }catch(e){}
+  }
+
+  /* 开屏层散场：首 set() 完成（云层开始错落浮现）后调用。驻留 0.1s 再 1.0s 溶解，
+     开屏底色从容淡出；异常路径由 fxSplashAuto 5.5s 兜底 */
+  function fadeBootSplash(){
+    try{
+      var s = document.getElementById('fxSplash');
+      if(!s || s.dataset.out) return;
+      s.dataset.out = '1';
+      setTimeout(function(){
+        requestAnimationFrame(function(){
+          s.classList.add('out');
+          setTimeout(function(){ if(s.parentNode) s.parentNode.removeChild(s); }, 2000);
+        });
+      }, 100);
+    }catch(e){}
+  }
+
   function set(weatherKey){
     init();
     if(!cv) return;
@@ -1645,12 +1789,25 @@ const WeatherFX = (function(){
       if(!running) start();
       return;
     }
+    if(mode) softSwap();   // 天气模式变化时软切变，云层平滑过渡
 
     mode  = weatherKey;
     phase = p;
     build(mode);
-    cv.classList.add('on');
-    cv.style.opacity = String(fxPrefs.fxOpacity);
+    if(bootInstant){
+      // 开屏：画布 1.0s 渐显（不再瞬亮），与云层错落浮现同步
+      void cv.offsetWidth;   // 先以 opacity:0 落一次基线，刚插入的画布无过渡起点
+      cv.style.transition = 'opacity 1.4s ease-out';
+      cv.classList.add('on');
+      cv.style.opacity = String(fxPrefs.fxOpacity);
+      bootInstant = false;
+      bootSpawn = false;   // 出生延迟只用于开屏首建
+      setTimeout(function(){ if(cv) cv.style.transition = ''; }, 1500);
+      fadeBootSplash();    // 开屏层：云层开始浮现后驻留→1.0s 溶解
+    }else{
+      cv.classList.add('on');
+      cv.style.opacity = String(fxPrefs.fxOpacity);
+    }
     start();
   }
 
@@ -1664,6 +1821,7 @@ const WeatherFX = (function(){
       if(rebuildTimer) clearTimeout(rebuildTimer);
       rebuildTimer = setTimeout(function(){
         rebuildTimer = null;
+        softSwap();        // 滑杆连续拖动时只保留最新快照，云量变化也是淡出淡入
         if(mode) build(mode);
         if(!running) start();
       }, 60);
@@ -1718,6 +1876,8 @@ function applyWeatherTheme(skycon){
   if(document.body.dataset.weather !== key){
     document.body.dataset.weather = key;
   }
+  // 主题已经落到 body 上，移除首帧铺底，后续切换只看 body
+  document.documentElement.removeAttribute('data-boot-weather');
   WeatherFX.set(key);
   applyPanelAlpha();
 }
@@ -2261,8 +2421,14 @@ function readWeatherCache(){
 
 function saveWeatherCache(data){
   try{
+    // 把主题一起存下来，下次开屏首帧可以直接用缓存天气的配色
+    let theme = '';
+    try{
+      const rt = data && data.result && data.result.realtime;
+      theme = WEATHER_THEME[ds(rt && rt.skycon)] || 'cloudy';
+    }catch(e){}
     localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({
-      savedAt: Date.now(), location: LOCATION, place: PLACE_NAME, data
+      savedAt: Date.now(), location: LOCATION, place: PLACE_NAME, theme, data
     }));
   }catch(e){}
 }
@@ -2270,6 +2436,8 @@ function saveWeatherCache(data){
 function showCachedWeather(){
   const cache = readWeatherCache();
   if(!cache) return false;
+  // 位置已变化时不要用旧位置的天气充数，避免启动瞬间显示错误地点
+  if(LOCATION && cache.location && cache.location !== LOCATION) return false;
   try{ draw(cache.data); return true; }
   catch(e){ return false; }
 }
@@ -2299,7 +2467,9 @@ window.onNativeWeatherResult = function(jsonText){
 window.onNativeWeatherError = function(message){
   const waiters = nativeWeatherWaiters.splice(0);
   if(nativeWeatherTimer){ clearTimeout(nativeWeatherTimer); nativeWeatherTimer=null; }
-  if(hasVisibleWeather || readWeatherCache()){
+  // 只有真正显示了天气（缓存或新数据）时才静默失败；否则必须提示错误，
+  // 避免位置变化导致缓存不可用时页面一直停在骨架上。
+  if(hasVisibleWeather){
     waiters.forEach(resolve=>resolve(false));
     return;
   }
@@ -2382,6 +2552,20 @@ window.refreshWeather = async function(){
 
 window.pauseAutoRefresh = function(){};
 window.resumeAutoRefresh = function(){};
+
+/* 首屏同步渲染缓存：脚本执行时立即画出上次天气，避免启动瞬间闪出加载占位。
+   无缓存时才由下面的 load() 显示骨架 / 错误提示。 */
+try{
+  if(!hasVisibleWeather){
+    // 缓存还没画出来时，先把已知地点显示在顶部，避免顶栏空白
+    const locEl = document.getElementById('loc');
+    if(locEl && !locEl.textContent && PLACE_NAME && PLACE_NAME !== '未设置位置'){
+      locEl.textContent = PLACE_NAME;
+    }
+    hasVisibleWeather = showCachedWeather();
+  }
+}catch(e){}
+document.documentElement.classList.remove('wx-booting');
 
 if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', load); } else { load(); }
 </script>
