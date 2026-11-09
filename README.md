@@ -76,7 +76,6 @@ CaiyunWeatherAPI/
 ├── build.gradle / settings.gradle / gradle.properties     # Gradle 9.6.0 / AGP 9.4.0
 ├── gradlew / gradlew.bat / gradle/wrapper/*               # Gradle Wrapper
 ├── docs/demo.html                                         # 完整页面演示（GitHub Pages）
-├── index.html                                             # 早期静态示意页
 └── app/
     ├── build.gradle
     ├── proguard-rules.pro                                 # R8 混淆规则
